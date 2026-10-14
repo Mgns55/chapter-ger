@@ -878,6 +878,7 @@ def run_oled_service(
 
         startup_config = load_config()
         runtime_config = startup_config
+        playback.set_playback_rate(startup_config.playback_speed)
         menu = ApplianceMenu(
             sorted_books_for_menu(load_cached_books(startup_config), startup_config.library_sort_mode),
             library_sort_mode=startup_config.library_sort_mode,
@@ -958,7 +959,13 @@ def run_oled_service(
                     continue
                 software_update_screen_visible = False
                 if now - last_runtime_config_load >= DEFAULT_RUNTIME_CONFIG_REFRESH_SECONDS:
-                    runtime_config = load_config()
+                    refreshed_config = load_config()
+                    if refreshed_config.playback_speed != runtime_config.playback_speed:
+                        try:
+                            playback.set_playback_rate(refreshed_config.playback_speed)
+                        except PlaybackError as error:
+                            print(f"Playback speed update failed: {error}")
+                    runtime_config = refreshed_config
                     last_runtime_config_load = now
                 woke_screen_saver, wake_input_quiet_until = consume_screen_saver_wake_input(
                     events,

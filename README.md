@@ -4,7 +4,7 @@
 
 A simple Raspberry Pi friendly Chapter player for Audiobookshelf.
 
-Current release: **[v0.3.11](https://github.com/chrismtopher/chapter/releases/tag/v0.3.11)**
+Current release: **[v0.3.12](https://github.com/chrismtopher/chapter/releases/tag/v0.3.12)**
 
 Chapter Player for Audiobookshelf is an independent third-party project and is not affiliated with or supported by the Audiobookshelf project.
 
@@ -19,7 +19,7 @@ Flash Raspberry Pi OS Lite onto a Raspberry Pi Zero 2 W/WH, enable SSH, and conn
 Then run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismtopher/chapter/v0.3.11/scripts/install-raspberry-pi.sh | bash
+curl -fsSL https://raw.githubusercontent.com/chrismtopher/chapter/v0.3.12/scripts/install-raspberry-pi.sh | bash
 sudo reboot
 ```
 
@@ -101,6 +101,7 @@ For a package-style quick start card, open the [PDF](docs/first-boot-quick-start
 - Internal speaker playback through GStreamer
 - Audiobookshelf login through the local setup page
 - Admin web page player controls, including play/pause and volume
+- Configurable `1x`, `1.5x`, and `2x` playback speed
 - Configurable library ordering by title or author last name
 - Optional offline spoken navigation for book titles and controls using a tuned eSpeak NG voice
 - System-tab software update checks and one-button stable release installation

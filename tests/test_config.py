@@ -6,11 +6,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from abs_kids_player.config import (
+    DEFAULT_PLAYBACK_SPEED,
     DEFAULT_SCREEN_SAVER_DIM_PERCENT,
     DEFAULT_SLEEP_TIMER_MINUTES,
     LIBRARY_SORT_AUTHOR,
     LIBRARY_SORT_TITLE,
     MAX_SLEEP_TIMER_MINUTES,
+    PLAYBACK_SPEEDS,
     SCREEN_SAVER_BOOKS,
     SCREEN_SAVER_CHAPTER,
     SCREEN_SAVER_DIM_LEVELS,
@@ -22,12 +24,28 @@ from abs_kids_player.config import (
     saved_auth_tokens,
     update_auth_tokens,
     valid_library_sort_mode,
+    valid_playback_speed,
     valid_screen_saver_dim_percent,
     valid_sleep_timer_minutes,
 )
 
 
 class ConfigTest(unittest.TestCase):
+    def test_playback_speed_defaults_to_one_and_validates_options(self) -> None:
+        self.assertEqual(AppConfig().playback_speed, DEFAULT_PLAYBACK_SPEED)
+        for speed in PLAYBACK_SPEEDS:
+            self.assertEqual(valid_playback_speed(speed), speed)
+        self.assertEqual(valid_playback_speed("1.5"), 1.5)
+        self.assertEqual(valid_playback_speed("1.25"), DEFAULT_PLAYBACK_SPEED)
+        self.assertEqual(valid_playback_speed(None), DEFAULT_PLAYBACK_SPEED)
+
+    def test_config_saves_playback_speed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict("os.environ", {"ABS_KIDS_PLAYER_CONFIG_DIR": temp_dir}, clear=False):
+                save_config(AppConfig(playback_speed=1.5))
+
+                self.assertEqual(load_config().playback_speed, 1.5)
+
     def test_library_sort_defaults_to_title_and_validates_modes(self) -> None:
         self.assertEqual(AppConfig().library_sort_mode, LIBRARY_SORT_TITLE)
         self.assertEqual(valid_library_sort_mode(LIBRARY_SORT_AUTHOR), LIBRARY_SORT_AUTHOR)

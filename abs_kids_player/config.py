@@ -18,6 +18,8 @@ SCREEN_SAVER_MODES = (SCREEN_SAVER_CHAPTER, SCREEN_SAVER_BOOKS, SCREEN_SAVER_CLO
 LIBRARY_SORT_TITLE = "title"
 LIBRARY_SORT_AUTHOR = "author"
 LIBRARY_SORT_MODES = (LIBRARY_SORT_TITLE, LIBRARY_SORT_AUTHOR)
+PLAYBACK_SPEEDS = (1.0, 1.5, 2.0)
+DEFAULT_PLAYBACK_SPEED = 1.0
 SCREEN_SAVER_DIM_LEVELS = (10, 15, 20, 25, 35, 50)
 DEFAULT_SCREEN_SAVER_DIM_PERCENT = 15
 DEFAULT_SLEEP_TIMER_MINUTES = 30
@@ -49,6 +51,7 @@ class AppConfig:
     control_click_enabled: bool = True
     spoken_navigation_enabled: bool = False
     library_sort_mode: str = LIBRARY_SORT_TITLE
+    playback_speed: float = DEFAULT_PLAYBACK_SPEED
     screen_saver_mode: str = SCREEN_SAVER_CHAPTER
     screen_saver_dim_percent: int = DEFAULT_SCREEN_SAVER_DIM_PERCENT
     sleep_timer_enabled: bool = False
@@ -80,6 +83,7 @@ def load_config() -> AppConfig:
         control_click_enabled=bool(data.get("control_click_enabled", True)),
         spoken_navigation_enabled=bool(data.get("spoken_navigation_enabled", False)),
         library_sort_mode=valid_library_sort_mode(str(data.get("library_sort_mode", ""))),
+        playback_speed=valid_playback_speed(data.get("playback_speed")),
         screen_saver_mode=valid_screen_saver_mode(str(data.get("screen_saver_mode", ""))),
         screen_saver_dim_percent=valid_screen_saver_dim_percent(data.get("screen_saver_dim_percent")),
         sleep_timer_enabled=bool(data.get("sleep_timer_enabled", False)),
@@ -154,6 +158,14 @@ def valid_screen_saver_mode(value: str) -> str:
 
 def valid_library_sort_mode(value: str) -> str:
     return value if value in LIBRARY_SORT_MODES else LIBRARY_SORT_TITLE
+
+
+def valid_playback_speed(value: object) -> float:
+    try:
+        speed = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_PLAYBACK_SPEED
+    return speed if speed in PLAYBACK_SPEEDS else DEFAULT_PLAYBACK_SPEED
 
 
 def valid_screen_saver_dim_percent(value: object) -> int:

@@ -4,6 +4,10 @@ All notable changes to Chapter Player for Audiobookshelf are documented here.
 
 ## Unreleased
 
+## [0.3.12] - 2026-10-14
+
+- Added a configurable `1x`, `1.5x`, or `2x` playback speed setting with live updates and pitch-preserving audio.
+
 ## [0.3.11] - 2026-10-04
 
 - Announce Volume-knob adjustments at 10% intervals when spoken navigation is enabled.

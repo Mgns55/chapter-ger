@@ -43,6 +43,7 @@ from abs_kids_player.setup_server import (
     schedule_wifi_forget,
     save_click_setting,
     save_library_sort_setting,
+    save_playback_speed_setting,
     save_podcast_settings,
     save_screen_saver_setting,
     save_sleep_timer_setting,
@@ -262,6 +263,12 @@ class SetupServerTest(unittest.TestCase):
 
         author_order = render_settings_card(AppConfig(library_sort_mode=LIBRARY_SORT_AUTHOR))
         self.assertIn('<option value="author" selected>Author (last name)</option>', author_order)
+        self.assertIn('class="setting-name">Playback speed</div>', enabled)
+        self.assertIn('action="/settings/playback-speed"', enabled)
+        self.assertIn('<option value="1" selected>1x</option>', enabled)
+        faster_playback = render_settings_card(AppConfig(playback_speed=1.5))
+        self.assertIn('<option value="1.5" selected>1.5x</option>', faster_playback)
+        self.assertIn('<option value="2">2x</option>', faster_playback)
         self.assertIn('class="setting-name">Screen saver</div>', enabled)
         self.assertNotIn('class="setting-name">Screen saver</div>\n            <div class="setting-state">', enabled)
         self.assertIn('action="/settings/screensaver"', enabled)
@@ -382,6 +389,25 @@ class SetupServerTest(unittest.TestCase):
         self.assertEqual(updated.screen_saver_mode, SCREEN_SAVER_BOOKS)
         self.assertEqual(updated.screen_saver_dim_percent, 10)
         self.assertEqual(updated.podcasts, podcasts)
+        save_config.assert_called_once_with(updated)
+
+    def test_save_playback_speed_setting_preserves_other_config(self) -> None:
+        config = AppConfig(
+            server_url="https://books.example.com",
+            token="token",
+            username="chapter",
+            playback_speed=1.0,
+        )
+
+        with (
+            patch("abs_kids_player.setup_server.load_config", return_value=config),
+            patch("abs_kids_player.setup_server.save_config") as save_config,
+        ):
+            updated = save_playback_speed_setting("1.5")
+
+        self.assertEqual(updated.playback_speed, 1.5)
+        self.assertEqual(updated.server_url, config.server_url)
+        self.assertEqual(updated.token, config.token)
         save_config.assert_called_once_with(updated)
 
     def test_save_sleep_timer_setting_preserves_other_config(self) -> None:
@@ -517,6 +543,19 @@ class SetupServerTest(unittest.TestCase):
             handler.handle_screen_saver_setting_post()
 
         save_setting.assert_called_once_with(SCREEN_SAVER_BOOKS, 10)
+        handler.redirect_home.assert_called_once_with()
+
+    def test_playback_speed_setting_post_redirects_home_after_save(self) -> None:
+        body = b"playback_speed=2"
+        handler = object.__new__(SetupHandler)
+        handler.headers = {"Content-Length": str(len(body))}
+        handler.rfile = io.BytesIO(body)
+        handler.redirect_home = Mock()
+
+        with patch("abs_kids_player.setup_server.save_playback_speed_setting") as save_setting:
+            handler.handle_playback_speed_setting_post()
+
+        save_setting.assert_called_once_with("2")
         handler.redirect_home.assert_called_once_with()
 
     def test_sleep_timer_toggle_post_redirects_home_after_save(self) -> None:

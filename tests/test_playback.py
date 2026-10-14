@@ -20,6 +20,7 @@ class FakePlaybin:
         self.volume_values: list[float] = []
         self.states: list[object] = []
         self.seeks: list[tuple[object, object, int]] = []
+        self.rate_seeks: list[tuple[float, object, object, object, int, object, int]] = []
         self.events: list[tuple[str, object]] = []
         self.position = 0
         self.query_position_calls = 0
@@ -48,6 +49,20 @@ class FakePlaybin:
         self.seeks.append((format_, flags, position))
         self.events.append(("seek", position))
 
+    def seek(
+        self,
+        rate: float,
+        format_: object,
+        flags: object,
+        start_type: object,
+        start: int,
+        stop_type: object,
+        stop: int,
+    ) -> bool:
+        self.rate_seeks.append((rate, format_, flags, start_type, start, stop_type, stop))
+        self.events.append(("rate-seek", start))
+        return True
+
 
 class FakeSink:
     def __init__(self) -> None:
@@ -59,6 +74,7 @@ class FakeSink:
 
 class FakeGst:
     SECOND = 1
+    CLOCK_TIME_NONE = -1
 
     class ElementFactory:
         @staticmethod
@@ -77,6 +93,10 @@ class FakeGst:
         FLUSH = 1
         KEY_UNIT = 2
         ACCURATE = 4
+
+    class SeekType:
+        SET = "set"
+        NONE = "none"
 
 
 class FakeGstWithSink(FakeGst):
@@ -135,6 +155,53 @@ class PlaybackTest(unittest.TestCase):
         )
         self.assertLess(preroll_seek_index, playing_index)
         self.assertLess(playing_index, first_audible_volume_index)
+        self.assertIn("audio-filter", playback.playbin.properties)
+
+    def test_configured_playback_rate_is_used_when_starting(self) -> None:
+        playback = GStreamerPlayback()
+        playback.set_playback_rate(1.5)
+        session = SimpleNamespace(
+            library_item_id="book-1",
+            duration=300,
+            current_time=42,
+            tracks=[SimpleNamespace(start_offset=0, duration=300, url="http://example.test/book.mp3")],
+        )
+
+        with patch("abs_kids_player.playback.load_gstreamer", return_value=FakeGst()):
+            with patch("abs_kids_player.playback.time.sleep"):
+                playback.start(session, FakeClient())
+
+        self.assertEqual(playback.playback_rate, 1.5)
+        self.assertEqual(playback.playbin.seeks, [])
+        self.assertEqual(
+            playback.playbin.rate_seeks[-1],
+            (1.5, FakeGst.Format.TIME, 3, FakeGst.SeekType.SET, 42, FakeGst.SeekType.NONE, -1),
+        )
+
+    def test_playback_rate_change_applies_to_active_session(self) -> None:
+        playback = GStreamerPlayback()
+        playback.Gst = FakeGst()
+        playback.playbin = FakePlaybin()
+        playback.session = SimpleNamespace(
+            duration=300,
+            tracks=[SimpleNamespace(start_offset=0, duration=300, url="http://example.test/book.mp3")],
+        )
+        playback.current_time = 42
+        playback.playbin.position = 45
+        playback.is_playing = True
+
+        playback.set_playback_rate(2.0)
+
+        self.assertEqual(playback.playback_rate, 2.0)
+        self.assertEqual(playback.current_time, 45)
+        self.assertEqual(
+            playback.playbin.rate_seeks[-1],
+            (2.0, FakeGst.Format.TIME, 3, FakeGst.SeekType.SET, 45, FakeGst.SeekType.NONE, -1),
+        )
+
+        playback.set_playback_rate(1.0)
+
+        self.assertEqual(playback.playbin.seeks[-1], (FakeGst.Format.TIME, 3, 45))
 
     def test_start_uses_bluetooth_alsa_sink_when_connected(self) -> None:
         playback = GStreamerPlayback()

@@ -22,6 +22,7 @@ from .config import (
     LIBRARY_SORT_TITLE,
     MAX_SLEEP_TIMER_MINUTES,
     MIN_SLEEP_TIMER_MINUTES,
+    PLAYBACK_SPEEDS,
     SCREEN_SAVER_BOOKS,
     SCREEN_SAVER_CHAPTER,
     SCREEN_SAVER_CLOCK,
@@ -31,6 +32,7 @@ from .config import (
     load_config,
     save_config,
     valid_library_sort_mode,
+    valid_playback_speed,
     valid_screen_saver_dim_percent,
     valid_screen_saver_mode,
     valid_sleep_timer_minutes,
@@ -1281,6 +1283,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             "/settings/click": self.handle_click_setting_post,
             "/settings/spoken-navigation": self.handle_spoken_navigation_setting_post,
             "/settings/library-order": self.handle_library_sort_setting_post,
+            "/settings/playback-speed": self.handle_playback_speed_setting_post,
             "/settings/screensaver": self.handle_screen_saver_setting_post,
             "/settings/sleep": self.handle_sleep_setting_post,
             "/podcasts": self.handle_podcasts_post,
@@ -1427,6 +1430,13 @@ class SetupHandler(BaseHTTPRequestHandler):
         if fields is None:
             return
         save_library_sort_setting(one(fields, "library_sort_mode"))
+        self.redirect_home()
+
+    def handle_playback_speed_setting_post(self) -> None:
+        fields = self.post_fields()
+        if fields is None:
+            return
+        save_playback_speed_setting(one(fields, "playback_speed"))
         self.redirect_home()
 
     def handle_screen_saver_setting_post(self) -> None:
@@ -1817,6 +1827,13 @@ def save_library_sort_setting(mode: str) -> AppConfig:
     return updated
 
 
+def save_playback_speed_setting(speed: object) -> AppConfig:
+    config = load_config()
+    updated = replace(config, playback_speed=valid_playback_speed(speed))
+    save_config(updated)
+    return updated
+
+
 def save_screen_saver_setting(mode: str, dim_percent: int | None = None) -> AppConfig:
     config = load_config()
     updated = replace(
@@ -2097,6 +2114,18 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
             <button class="small-button secondary" type="submit">Save</button>
           </form>
         </div>
+        <div class="settings-row">
+          <div>
+            <div class="setting-name">Playback speed</div>
+          </div>
+          <form class="select-form" method="post" action="/settings/playback-speed">
+            {csrf_input}
+            <select class="settings-select" name="playback_speed" aria-label="Playback speed">
+              {playback_speed_options}
+            </select>
+            <button class="small-button secondary" type="submit">Save</button>
+          </form>
+        </div>
         <div class="settings-row screen-saver-row">
           <div>
             <div class="setting-name">Screen saver</div>
@@ -2143,6 +2172,7 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         spoken_navigation_aria_pressed=spoken_navigation_aria_pressed,
         spoken_navigation_button_label=spoken_navigation_button_label,
         library_sort_options=render_library_sort_options(config.library_sort_mode),
+        playback_speed_options=render_playback_speed_options(config.playback_speed),
         screen_saver_options=render_screen_saver_options(config.screen_saver_mode),
         screen_saver_dim_options=render_screen_saver_dim_options(config.screen_saver_dim_percent),
         sleep_next_value=sleep_next_value,
@@ -2230,6 +2260,17 @@ def render_library_sort_options(selected_mode: str) -> str:
             label=label,
         )
         for value, label in options
+    )
+
+
+def render_playback_speed_options(selected_speed: float) -> str:
+    return "\n".join(
+        '<option value="{value}"{selected}>{label}</option>'.format(
+            value=f"{speed:g}",
+            selected=" selected" if speed == selected_speed else "",
+            label=f"{speed:g}x",
+        )
+        for speed in PLAYBACK_SPEEDS
     )
 
 

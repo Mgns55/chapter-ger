@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import threading
 import time
 from typing import Any
@@ -51,6 +52,7 @@ class GStreamerPlayback:
         self._effective_volume = 0.5
         self.bluetooth_output_enabled = False
         self.audio_output_device = ""
+        self.playback_rate = 1.0
 
     def start(self, session: PlaybackSession, client: AudiobookshelfClient) -> None:
         self.stop()
@@ -58,6 +60,7 @@ class GStreamerPlayback:
         self.playbin = self.Gst.ElementFactory.make("playbin", "chapter-player")
         if self.playbin is None:
             raise PlaybackError("Could not create GStreamer playbin.")
+        self.configure_tempo_filter()
         self.session = session
         self.client = client
         self.track_index = self.track_index_for_time(session.current_time)
@@ -221,6 +224,19 @@ class GStreamerPlayback:
     def seek_track(self, seconds: float) -> None:
         if self.playbin is None or self.Gst is None:
             return
+        if abs(self.playback_rate - 1.0) >= 0.001:
+            ok = self.playbin.seek(
+                self.playback_rate,
+                self.Gst.Format.TIME,
+                self.Gst.SeekFlags.FLUSH | self.Gst.SeekFlags.KEY_UNIT,
+                self.Gst.SeekType.SET,
+                int(seconds * self.Gst.SECOND),
+                self.Gst.SeekType.NONE,
+                self.Gst.CLOCK_TIME_NONE,
+            )
+            if ok is False:
+                print(f"GStreamer rate seek failed at {seconds:.1f}s and {self.playback_rate:g}x")
+            return
         ok = self.playbin.seek_simple(
             self.Gst.Format.TIME,
             self.Gst.SeekFlags.FLUSH | self.Gst.SeekFlags.KEY_UNIT,
@@ -228,6 +244,38 @@ class GStreamerPlayback:
         )
         if ok is False:
             print(f"GStreamer seek failed at {seconds:.1f}s")
+
+    def set_playback_rate(self, rate: float) -> None:
+        try:
+            requested_rate = float(rate)
+        except (TypeError, ValueError) as error:
+            raise PlaybackError("Playback speed must be a number.") from error
+        if not math.isfinite(requested_rate) or requested_rate <= 0:
+            raise PlaybackError("Playback speed must be greater than zero.")
+        if abs(self.playback_rate - requested_rate) < 0.001:
+            return
+
+        self.playback_rate = requested_rate
+        if self.playbin is None or self.Gst is None or self.session is None:
+            return
+
+        if self.is_playing:
+            success, position = self.playbin.query_position(self.Gst.Format.TIME)
+            if success:
+                self.current_time = self.current_track.start_offset + position / self.Gst.SECOND
+        self.seek_track(max(0.0, self.current_time - self.current_track.start_offset))
+
+    def configure_tempo_filter(self) -> None:
+        if self.playbin is None or self.Gst is None:
+            return
+        try:
+            tempo_filter = self.Gst.ElementFactory.make("scaletempo", "chapter-tempo")
+            if tempo_filter is None:
+                print("GStreamer scaletempo is unavailable; playback pitch may change with speed.")
+                return
+            self.playbin.set_property("audio-filter", tempo_filter)
+        except Exception as error:
+            print(f"GStreamer tempo filter could not be configured: {error}")
 
     def wait_for_state_change(self) -> None:
         if self.playbin is None or self.Gst is None or not hasattr(self.playbin, "get_state"):

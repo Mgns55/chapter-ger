@@ -1,16 +1,21 @@
-"""Chapter case back (v5) adapted for a Raspberry Pi 3 Model A+.
+"""Chapter case back (v5) adapted for a Raspberry Pi 3 Model A+, German labels.
 
 - removes the four Pi Zero bosses on the back wall (upper left)
 - adds four standoffs on top of the speaker-chamber lid for the Pi 3 A+
   (hole pattern 58 x 49 mm, same M2.5 heat-set inserts as the rest of the case)
 
+- replaces the engraved "SELECT" / "VOLUME" on top with "Menü" / "Lautstärke"
+
 Everything else (speaker chamber, amp block, USB-C mount, encoder mounts,
 snap rim for the unchanged front cover) stays exactly as in the original file.
-Usage: python3 make_case.py <original back STL> <output STL>
+Usage: python3 make_case.py <original back STL> <output STL> [--zero]
 """
 import sys
 
 import manifold3d as mf
+from matplotlib.font_manager import FontProperties
+from matplotlib.textpath import TextPath
+from shapely.geometry import Polygon
 import numpy as np
 import trimesh
 
@@ -28,6 +33,47 @@ STANDOFF_HEIGHT = 6.0          # board underside at z = 64
 STANDOFF_RADIUS = 3.5          # 7 mm, like the original bosses
 INSERT_HOLE_RADIUS = 1.55      # 3.1 mm, like the original bosses
 INSERT_HOLE_DEPTH = 5.0
+
+
+# Engraved labels on the top (measured): cap height 5 mm, 1.5 mm deep, baseline y = 12
+TOP_Z = 100.0
+ENGRAVE_DEPTH = 1.5
+LABEL_FILL_BOX = (88.0, 155.0, 11.0, 18.5)        # x0, x1, y0, y1 around the old text
+LABEL_BASELINE_Y = 12.0
+LABELS = [("Menü", 102.5), ("Lautstärke", 137.5)]   # text, centre x (= knob centre)
+LABEL_MAX_WIDTH = 33.0
+LABEL_CAP_HEIGHT = 5.0
+FONT = FontProperties(family="DejaVu Serif")
+
+
+def text_polygons(text: str, size: float):
+    path = TextPath((0, 0), text, size=size, prop=FONT)
+    shape = None
+    for ring in path.to_polygons():
+        if len(ring) < 3:
+            continue
+        poly = Polygon(ring).buffer(0)
+        shape = poly if shape is None else shape.symmetric_difference(poly)
+    return shape
+
+
+def label_cutter(text: str, centre_x: float, size: float) -> mf.Manifold:
+    shape = text_polygons(text, size)
+    minx, _, maxx, _ = shape.bounds
+    geoms = getattr(shape, "geoms", [shape])
+    cutter = mf.Manifold()
+    for geom in geoms:
+        solid = trimesh.creation.extrude_polygon(geom, ENGRAVE_DEPTH + 0.6)
+        solid.apply_translation([centre_x - (minx + maxx) / 2, LABEL_BASELINE_Y, TOP_Z - ENGRAVE_DEPTH])
+        cutter = cutter + to_manifold(solid)
+    return cutter
+
+
+def label_size() -> float:
+    cap = TextPath((0, 0), "M", size=10, prop=FONT).get_extents().height / 10
+    size = LABEL_CAP_HEIGHT / cap
+    widest = max(TextPath((0, 0), t, size=1, prop=FONT).get_extents().width for t, _ in LABELS)
+    return min(size, LABEL_MAX_WIDTH / widest)
 
 
 def to_manifold(mesh: trimesh.Trimesh) -> mf.Manifold:
@@ -55,7 +101,7 @@ def pi_holes():
     return [(x, y) for x in xs for y in ys]
 
 
-def main(src: str, dst: str) -> None:
+def main(src: str, dst: str, pi3a: bool = True) -> None:
     original = trimesh.load(src)
     offset = -original.bounds[0]
     original.apply_translation(offset)
@@ -64,20 +110,31 @@ def main(src: str, dst: str) -> None:
     assert shell.is_watertight, "main case body must be closed"
 
     body = to_manifold(shell)
-    for x, z in ZERO_BOSSES:
+    for x, z in (ZERO_BOSSES if pi3a else []):
         body = body - cylinder_y(x, z, BOSS_Y_FROM, BACK_WALL_Y + 0.2, BOSS_CUT_RADIUS)
-    for x, y in pi_holes():
+    for x, y in (pi_holes() if pi3a else []):
         standoff = cylinder_z(x, y, LID_TOP_Z - 0.5, LID_TOP_Z + STANDOFF_HEIGHT, STANDOFF_RADIUS)
         hole = cylinder_z(x, y, LID_TOP_Z + STANDOFF_HEIGHT - INSERT_HOLE_DEPTH,
                           LID_TOP_Z + STANDOFF_HEIGHT + 0.5, INSERT_HOLE_RADIUS)
         body = (body + standoff) - hole
 
+    # German labels: fill the old engraving, then engrave the new words
+    x0, x1, y0, y1 = LABEL_FILL_BOX
+    fill = mf.Manifold.cube([x1 - x0, y1 - y0, ENGRAVE_DEPTH + 0.1]).translate([x0, y0, TOP_Z - ENGRAVE_DEPTH - 0.1])
+    body = body + fill
+    size = label_size()
+    for text, centre_x in LABELS:
+        body = body - label_cutter(text, centre_x, size)
+    print("label font size", round(size, 2), "-> cap height", round(size * 0.729, 2), "mm")
+
     result = trimesh.util.concatenate([to_trimesh(body), *extras])
     result.apply_translation(-offset)          # back to the original file's position
     result.export(dst)
     print("written", dst, "watertight body:", to_trimesh(body).is_watertight)
-    print("Pi 3 A+ standoffs at (x, y):", [(round(x, 1), round(y, 1)) for x, y in pi_holes()])
+    if pi3a:
+        print("Pi 3 A+ standoffs at (x, y):", [(round(x, 1), round(y, 1)) for x, y in pi_holes()])
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    # add --zero to keep the Pi Zero mounts and only change the labels
+    main(sys.argv[1], sys.argv[2], pi3a="--zero" not in sys.argv[3:])

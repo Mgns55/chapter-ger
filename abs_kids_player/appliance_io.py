@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from . import i18n
 from .rotary_ui import (
     BluetoothDevicesFrame,
     BluetoothMenuFrame,
@@ -785,6 +786,7 @@ def text_width(draw, text: str, font) -> int:
 
 
 def oled_safe_text(text: str) -> str:
+    text = i18n.display(text)
     translated = text.translate(
         str.maketrans(
             {

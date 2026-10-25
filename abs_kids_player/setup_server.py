@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import parse_qs, urlparse
 
+from . import i18n
 from . import __version__
 from .api import AudiobookshelfClient, AudiobookshelfError, client_from_config
 from .bluetooth_audio import connected_bluetooth_audio_device
@@ -1545,7 +1546,8 @@ class SetupHandler(BaseHTTPRequestHandler):
             csrf_token=html.escape(csrf_token, quote=True),
             csrf_input=render_csrf_input(csrf_token),
             csrf_field_name=CSRF_FIELD_NAME,
-        ).encode("utf-8")
+        )
+        body = i18n.html_page(body).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -1566,7 +1568,8 @@ class SetupHandler(BaseHTTPRequestHandler):
             "<title>Chapter Player</title></head><body><main>"
             f"<h1>Chapter Player</h1><p>{html.escape(message)}</p>"
             '<p><a href="/">Reload setup page</a></p></main></body></html>'
-        ).encode("utf-8")
+        )
+        body = i18n.html_page(body).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -1597,7 +1600,7 @@ class SetupHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def send_json(self, data: dict) -> None:
-        body = json.dumps(data).encode("utf-8")
+        body = json.dumps(i18n.json_value(data)).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -1630,7 +1633,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             return
         while True:
             payload = player_status_payload(load_web_player_status())
-            payload_json = json.dumps(payload, separators=(",", ":"))
+            payload_json = json.dumps(i18n.json_value(payload), separators=(",", ":"))
             signature = player_status_event_signature(payload)
             now = time.monotonic()
             should_send = not last_payload

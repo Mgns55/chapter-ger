@@ -6,6 +6,7 @@ After=systemd-modules-load.service audiobookshelf-player-boot-splash.service
 Before=basic.target
 
 [Service]
+Environment=CHAPTER_LANGUAGE=de
 Type=simple
 User=chapter
 WorkingDirectory=/home/chapter/audiobookshelf-player

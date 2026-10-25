@@ -6,6 +6,8 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
+from . import i18n
+
 
 DuckCallback = Callable[[bool], None]
 ProcessFactory = Callable[..., subprocess.Popen]
@@ -45,7 +47,7 @@ class SpokenNavigationFeedback:
         volume_percent: int = 50,
         muted: bool = False,
     ) -> None:
-        clean_text = " ".join(text.split())
+        clean_text = " ".join(i18n.spoken(text).split())
         self.stop_processes()
         if not clean_text or muted or volume_percent <= 0:
             self.pending = None
@@ -88,7 +90,7 @@ class SpokenNavigationFeedback:
                     "--stdout",
                     "-z",
                     "-v",
-                    ESPEAK_VOICE,
+                    i18n.espeak_voice(ESPEAK_VOICE),
                     "-s",
                     str(ESPEAK_SPEED_WPM),
                     "-p",

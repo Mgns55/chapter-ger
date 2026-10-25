@@ -4,6 +4,10 @@ All notable changes to Chapter Player for Audiobookshelf are documented here.
 
 ## Unreleased
 
+## [0.3.14] - 2026-10-25 (Mgns55/chapter-ger)
+
+- Beim Start bis zu 90 Sekunden auf das gespeicherte WLAN warten, bevor der Setup-Hotspot startet. Langsame Boards landeten sonst unnötig im Hotspot.
+
 ## [0.3.13] - 2026-10-25 (Mgns55/chapter-ger)
 
 - Deutsche Oberfläche für Display, Sprachnavigation und Setup-Seite (`CHAPTER_LANGUAGE=de`).

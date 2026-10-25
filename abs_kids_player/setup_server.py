@@ -64,6 +64,7 @@ from .wifi import (
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 47831
+WIFI_STARTUP_WAIT_SECONDS = 90.0
 WIFI_CHANGE_DELAY_SECONDS = 5.0
 SYSTEM_ACTION_DELAY_SECONDS = 3.0
 PLAYER_EVENT_POLL_SECONDS = 0.25
@@ -2543,7 +2544,7 @@ def main() -> None:
         apply_bluetooth_radio(False)
     if args.ensure_wifi:
         try:
-            print(ensure_wifi_or_hotspot())
+            print(ensure_wifi_or_hotspot(wait_seconds=WIFI_STARTUP_WAIT_SECONDS))
         except WifiError as error:
             print(f"Wi-Fi setup mode could not start: {error}")
     run_setup_server()

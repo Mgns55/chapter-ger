@@ -264,6 +264,31 @@ class WifiTest(unittest.TestCase):
         self.assertEqual(result, "wifi-connected")
         self.assertEqual(len(runner.calls), 1)
 
+    def test_ensure_wifi_waits_for_saved_network_before_hotspot(self) -> None:
+        states = iter(["wlan0:wifi:disconnected\n", "Home:802-11-wireless\n", "wlan0:wifi:disconnected\n", "wlan0:wifi:connected\n"])
+
+        def runner(args):
+            return subprocess.CompletedProcess(args, 0, stdout=next(states), stderr="")
+
+        clock = iter([0.0, 0.0, 3.0, 6.0])
+        result = ensure_wifi_or_hotspot(runner, wait_seconds=90, sleep=lambda _: None, clock=lambda: next(clock))
+
+        self.assertEqual(result, "wifi-connected")
+
+    def test_ensure_wifi_starts_hotspot_after_waiting(self) -> None:
+        calls = []
+
+        def runner(args):
+            calls.append(args)
+            if "connection" in args:
+                return subprocess.CompletedProcess(args, 0, stdout="Home:802-11-wireless\n", stderr="")
+            return subprocess.CompletedProcess(args, 0, stdout="wlan0:wifi:disconnected\n", stderr="")
+
+        times = iter([0.0, 0.0, 50.0, 100.0])
+        result = ensure_wifi_or_hotspot(runner, wait_seconds=90, sleep=lambda _: None, clock=lambda: next(times, 200.0))
+
+        self.assertEqual(result, "hotspot-started")
+
     def test_split_nmcli_pair_unescapes_colons(self) -> None:
         self.assertEqual(split_nmcli_pair("yes:Kitchen\\: WiFi"), ("yes", "Kitchen: WiFi"))
 

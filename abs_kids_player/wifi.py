@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from typing import Callable
 
@@ -264,11 +265,34 @@ def forget_all_wifi_connections_and_start_hotspot(runner: CommandRunner = run_co
     start_setup_hotspot(device=device, runner=runner)
 
 
-def ensure_wifi_or_hotspot(runner: CommandRunner = run_command) -> str:
+def ensure_wifi_or_hotspot(
+    runner: CommandRunner = run_command,
+    wait_seconds: float = 0.0,
+    poll_seconds: float = 3.0,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> str:
     if wifi_is_connected(runner):
         return "wifi-connected"
+    # A slow board can reach this point before NetworkManager has joined the
+    # saved home network. Give a saved network time to connect instead of
+    # taking the Wi-Fi radio over with the setup hotspot right away.
+    if wait_seconds > 0 and has_saved_home_wifi(runner):
+        deadline = clock() + wait_seconds
+        while clock() < deadline:
+            sleep(poll_seconds)
+            if wifi_is_connected(runner):
+                return "wifi-connected"
     start_setup_hotspot(runner=runner)
     return "hotspot-started"
+
+
+def has_saved_home_wifi(runner: CommandRunner = run_command) -> bool:
+    try:
+        names = saved_wifi_connection_names(runner)
+    except WifiError:
+        return False
+    return any(name != SETUP_HOTSPOT_SSID for name in names)
 
 
 def split_nmcli_pair(line: str) -> tuple[str, str]:

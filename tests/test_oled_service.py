@@ -326,6 +326,16 @@ class OledServiceTest(unittest.TestCase):
 
         self.assertIsInstance(frame, WifiSetupFrame)
 
+    def test_boot_state_says_connecting_when_home_wifi_is_saved(self) -> None:
+        frame = frame_for_boot_state(
+            WifiStatus(connected=False, message="Not connected"),
+            startup_waiting=False,
+            saved_wifi=True,
+        )
+
+        self.assertIsInstance(frame, TwoLineFrame)
+        self.assertEqual(frame.top, "Connecting to Wi-Fi")
+
     def test_boot_state_shows_active_setup_hotspot_during_network_grace(self) -> None:
         frame = frame_for_boot_state(
             WifiStatus(connected=True, ssid=SETUP_HOTSPOT_SSID),

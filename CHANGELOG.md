@@ -4,6 +4,11 @@ All notable changes to Chapter Player for Audiobookshelf are documented here.
 
 ## Unreleased
 
+## [0.3.15] - 2026-10-25 (Mgns55/chapter-ger)
+
+- Ist ein Heim-WLAN gespeichert, zeigt das Display beim Start "Verbinde mit WLAN" statt der Hotspot-Anleitung.
+- Installer überschreibt beim Update abweichende alte Versionsmarken (fetch --force).
+
 ## [0.3.14] - 2026-10-25 (Mgns55/chapter-ger)
 
 - Beim Start bis zu 90 Sekunden auf das gespeicherte WLAN warten, bevor der Setup-Hotspot startet. Langsame Boards landeten sonst unnötig im Hotspot.

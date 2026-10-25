@@ -76,7 +76,7 @@ from .rotary_ui import (
 )
 from .spoken_navigation import SpokenNavigationFeedback
 from .software_update import load_update_state, mark_update_display_ready, update_state_is_active
-from .wifi import SETUP_HOTSPOT_SSID, SETUP_HOTSPOT_URL, WifiStatus, wifi_status
+from .wifi import SETUP_HOTSPOT_SSID, SETUP_HOTSPOT_URL, WifiStatus, has_saved_home_wifi, wifi_status
 
 
 DEFAULT_REFRESH_SECONDS = 0.14
@@ -279,6 +279,9 @@ def splash_frame() -> SplashFrame:
     return SplashFrame("chapter")
 
 
+CONNECTING_WIFI_FRAME = TwoLineFrame("Connecting to Wi-Fi", "Please wait")
+
+
 def setup_frame() -> WifiSetupFrame:
     return WifiSetupFrame(SETUP_HOTSPOT_SSID, SETUP_HOTSPOT_URL)
 
@@ -295,10 +298,17 @@ def frame_for_boot_state(
     home_frame: DisplayFrame | None = None,
     lan_ip: str | None = None,
     startup_waiting: bool = False,
+    saved_wifi: bool = False,
 ) -> DisplayFrame:
     if startup_waiting and not status.connected:
         return splash_frame()
-    if not status.connected or status.ssid == SETUP_HOTSPOT_SSID:
+    if status.connected and status.ssid == SETUP_HOTSPOT_SSID:
+        return setup_frame()
+    if not status.connected:
+        # A home network is saved but not joined yet: say so instead of asking
+        # to connect to the setup hotspot, which is not running.
+        if saved_wifi:
+            return CONNECTING_WIFI_FRAME
         return setup_frame()
     return home_frame or setup_address_frame(lan_ip)
 
@@ -927,6 +937,7 @@ def run_oled_service(
         bluetooth_enabled = False
         bluetooth_connected = False
         bluetooth_pairing_in_progress = False
+        saved_wifi = False
         playback_results: queue.SimpleQueue[PlaybackCommandResult] = queue.SimpleQueue()
         book_load_results: queue.SimpleQueue[BookLoadResult] = queue.SimpleQueue()
         bluetooth_results: queue.SimpleQueue[BluetoothActionResult] = queue.SimpleQueue()
@@ -1333,6 +1344,8 @@ def run_oled_service(
 
                 if cached_status is None or now - last_status_load >= status_refresh_seconds:
                     cached_status = wifi_status()
+                    if not cached_status.connected:
+                        saved_wifi = has_saved_home_wifi()
                     last_status_load = now
                 status = cached_status
                 startup_waiting = now - service_started_at < startup_network_grace_seconds
@@ -1430,12 +1443,12 @@ def run_oled_service(
                         now,
                     )
                     home_frame = scrolled_home_frame(cached_home_frame, now - home_frame_loaded_at)
-                    frame = frame_for_boot_state(status, home_frame, startup_waiting=startup_waiting)
+                    frame = frame_for_boot_state(status, home_frame, startup_waiting=startup_waiting, saved_wifi=saved_wifi)
                 else:
                     books_error_frame = None
                     book_refresh_started = False
                     cached_home_frame = None
-                    frame = frame_for_boot_state(status, startup_waiting=startup_waiting)
+                    frame = frame_for_boot_state(status, startup_waiting=startup_waiting, saved_wifi=saved_wifi)
                 if not boot_chime_played and not isinstance(frame, SplashFrame):
                     boot_chime_played = True
                     play_boot_chime()

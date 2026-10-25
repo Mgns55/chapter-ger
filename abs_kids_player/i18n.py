@@ -73,6 +73,8 @@ DISPLAY = {
     "Setup address": "Setup-Adresse",
     "IP unavailable": "Keine IP-Adresse",
     "Wi-Fi connected": "WLAN verbunden",
+    "Connecting to Wi-Fi": "Verbinde mit WLAN",
+    "Please wait": "Bitte kurz warten",
     "Open setup page": "Setup-Seite öffnen",
     "Updating...": "Aktualisiere ...",
     "DO NOT POWER OFF": "NICHT AUSSCHALTEN",

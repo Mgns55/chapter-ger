@@ -16,7 +16,7 @@ from . import __version__
 from .storage import ensure_storage_directory, finalize_storage_file
 
 
-DEFAULT_REPO_URL = "https://github.com/chrismtopher/chapter.git"
+DEFAULT_REPO_URL = "https://github.com/Mgns55/chapter-ger.git"
 DEFAULT_INSTALL_USER = "chapter"
 DEFAULT_INSTALL_DIR = "/home/chapter/audiobookshelf-player"
 UPDATE_SERVICE_NAME = "audiobookshelf-player-update.service"

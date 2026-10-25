@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="${CHAPTER_REPO_URL:-https://github.com/chrismtopher/chapter.git}"
+REPO_URL="${CHAPTER_REPO_URL:-https://github.com/Mgns55/chapter-ger.git}"
 RELEASE_REF="${CHAPTER_RELEASE_REF:-v0.3.12}"
 INSTALL_USER="${CHAPTER_INSTALL_USER:-chapter}"
 INSTALL_DIR="${CHAPTER_INSTALL_DIR:-}"

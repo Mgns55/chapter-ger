@@ -196,10 +196,10 @@ WEB = {
     "Password": "Passwort",
     "Log In Player": "Player anmelden",
     # Settings
-    "Library order": "Sortierung der Bibliothek",
+    "Library order": "Sortierung",
     "Title": "Titel",
-    "Author (last name)": "Autor (Nachname)",
-    "Playback speed": "Abspielgeschwindigkeit",
+    "Author (last name)": "Autor",
+    "Playback speed": "Tempo",
     "Screen saver": "Bildschirmschoner",
     "Screen saver style": "Art des Bildschirmschoners",
     "Screen saver dim level": "Helligkeit des Bildschirmschoners",
@@ -222,7 +222,7 @@ WEB = {
     "Disable spoken navigation": "Sprachnavigation ausschalten",
     "Enable sleep timer": "Einschlaf-Timer einschalten",
     "Disable sleep timer": "Einschlaf-Timer ausschalten",
-    "Save": "Speichern",
+    "Save": "OK",
     "Cancel": "Abbrechen",
     # Podcasts
     "Podcast URL": "Podcast-Adresse",

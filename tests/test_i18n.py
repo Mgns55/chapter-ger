@@ -55,7 +55,7 @@ class GermanWebTest(unittest.TestCase):
         page = '<html lang="en"><h2>Settings</h2><input aria-label="Volume"><p> Save </p></html>'
         self.assertEqual(
             i18n.html_page(page),
-            '<html lang="de"><h2>Einstellungen</h2><input aria-label="Lautstärke"><p> Speichern </p></html>',
+            '<html lang="de"><h2>Einstellungen</h2><input aria-label="Lautstärke"><p> OK </p></html>',
         )
 
     def test_script_keeps_compared_values(self):

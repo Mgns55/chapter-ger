@@ -4,6 +4,11 @@ All notable changes to Chapter Player for Audiobookshelf are documented here.
 
 ## Unreleased
 
+## [0.3.16] - 2026-10-25 (Mgns55/chapter-ger)
+
+- Setup-Seite: Audiobookshelf-Status wird eine Minute zwischengespeichert statt bei jedem Aufruf abgefragt.
+- Port-80-Weiterleitung wartet bis zu 30 statt 10 Sekunden auf die Setup-Seite (kein Fehler 502 mehr auf langsamen Boards).
+
 ## [0.3.15] - 2026-10-25 (Mgns55/chapter-ger)
 
 - Ist ein Heim-WLAN gespeichert, zeigt das Display beim Start "Verbinde mit WLAN" statt der Hotspot-Anleitung.

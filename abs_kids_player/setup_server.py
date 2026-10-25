@@ -1921,8 +1921,30 @@ def normalized_podcast_urls(urls: list[str]) -> list[str]:
     return normalized
 
 
+ABS_STATUS_CACHE_SECONDS = 60.0
+_abs_status_cache: tuple[tuple[str, str, str], float, tuple[bool, str]] | None = None
+
+
 def audiobookshelf_status() -> tuple[bool, str]:
+    """Audiobookshelf login status, cached for a minute.
+
+    Checking it means a round trip to the server on every page load; on a
+    Pi Zero that alone can push the page past the proxy timeout.
+    """
+    global _abs_status_cache
     config = load_config()
+    key = (config.server_url, config.token, config.library_id)
+    now = time.monotonic()
+    if _abs_status_cache is not None:
+        cached_key, cached_at, cached_result = _abs_status_cache
+        if cached_key == key and now - cached_at < ABS_STATUS_CACHE_SECONDS:
+            return cached_result
+    result = _audiobookshelf_status(config)
+    _abs_status_cache = (key, now, result)
+    return result
+
+
+def _audiobookshelf_status(config: AppConfig) -> tuple[bool, str]:
     if not config.is_ready:
         return False, "Not configured"
 

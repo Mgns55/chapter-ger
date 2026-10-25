@@ -48,7 +48,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         connection = http.client.HTTPConnection(
             self.server.target_host,  # type: ignore[attr-defined]
             self.server.target_port,  # type: ignore[attr-defined]
-            timeout=10,
+            timeout=30,
         )
         try:
             connection.request(self.command, target_path, body=body, headers=headers)

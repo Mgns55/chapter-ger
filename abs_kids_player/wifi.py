@@ -72,7 +72,8 @@ def wifi_is_connected(runner: CommandRunner = run_command) -> bool:
 
 
 def current_wifi_ssid(runner: CommandRunner = run_command) -> str:
-    result = nmcli(["-t", "-f", "ACTIVE,SSID", "device", "wifi", "list"], runner)
+    # "--rescan no": answer from the cache instead of starting a Wi-Fi scan on every status check.
+    result = nmcli(["-t", "-f", "ACTIVE,SSID", "device", "wifi", "list", "--rescan", "no"], runner)
     for line in result.stdout.splitlines():
         fields = split_nmcli_fields(line)
         if len(fields) >= 2 and fields[0] == "yes":

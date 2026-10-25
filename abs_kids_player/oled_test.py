@@ -15,7 +15,7 @@ def main() -> None:
     parser.add_argument("--dc-pin", type=int, default=24)
     parser.add_argument("--reset-pin", type=int, default=25)
     parser.add_argument("--cs-pin", type=int, default=None)
-    parser.add_argument("--speed", type=int, default=1_000_000)
+    parser.add_argument("--speed", type=int, default=4_000_000)
     parser.add_argument("--seconds", type=float, default=10)
     parser.add_argument(
         "--skip-all-on",

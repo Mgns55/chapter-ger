@@ -80,7 +80,7 @@ from .wifi import SETUP_HOTSPOT_SSID, SETUP_HOTSPOT_URL, WifiStatus, wifi_status
 
 
 DEFAULT_REFRESH_SECONDS = 0.14
-DEFAULT_STATUS_REFRESH_SECONDS = 2.0
+DEFAULT_STATUS_REFRESH_SECONDS = 5.0
 DEFAULT_SPLASH_SECONDS = 0.5
 DEFAULT_STARTUP_NETWORK_GRACE_SECONDS = 30.0
 DEFAULT_HOME_REFRESH_SECONDS = 60.0
@@ -722,12 +722,38 @@ def web_status_for_playback(
     )
 
 
+WEB_STATUS_MIN_WRITE_SECONDS = 2.0
+_last_web_status: WebPlayerStatus | None = None
+_last_web_status_written_at = 0.0
+
+
 def publish_web_player_status(
     playback: GStreamerPlayback,
     volume_percent: int,
     muted: bool,
+    force: bool = False,
 ) -> None:
-    save_web_player_status(web_status_for_playback(playback, volume_percent, muted))
+    """Write the status for the web page, but not on every loop pass.
+
+    The loop runs about seven times a second; writing the file each time keeps
+    the SD card and the single CPU core busy. Write at once when something other
+    than the play position changed, otherwise at most every two seconds.
+    """
+    global _last_web_status, _last_web_status_written_at
+    status = web_status_for_playback(playback, volume_percent, muted)
+    now = time.monotonic()
+    previous = _last_web_status
+    only_position_moved = previous is not None and replace(previous, current_time=status.current_time) == status
+    if (
+        not force
+        and previous is not None
+        and (status == previous or only_position_moved)
+        and now - _last_web_status_written_at < WEB_STATUS_MIN_WRITE_SECONDS
+    ):
+        return
+    save_web_player_status(status)
+    _last_web_status = status
+    _last_web_status_written_at = now
 
 
 def pause_and_publish_playback(
@@ -740,7 +766,7 @@ def pause_and_publish_playback(
         playback.pause(sync=True)
     playback.is_playing = False
     menu.update_playback(playback.current_time, False)
-    publish_web_player_status(playback, volume_percent, muted)
+    publish_web_player_status(playback, volume_percent, muted, force=True)
 
 
 def handle_web_player_commands(
@@ -905,7 +931,8 @@ def run_oled_service(
         book_load_results: queue.SimpleQueue[BookLoadResult] = queue.SimpleQueue()
         bluetooth_results: queue.SimpleQueue[BluetoothActionResult] = queue.SimpleQueue()
         bluetooth_status_results: queue.SimpleQueue[BluetoothStatusResult] = queue.SimpleQueue()
-        start_bluetooth_status_worker(bluetooth_status_results)
+        if startup_config.bluetooth_enabled:
+            start_bluetooth_status_worker(bluetooth_status_results)
         last_input_at = time.monotonic()
         last_loop_at = last_input_at
         last_runtime_config_load = last_input_at
@@ -1008,9 +1035,10 @@ def run_oled_service(
                         software_volume_only=software_volume_only,
                         bluetooth_enabled=bluetooth_enabled,
                         bluetooth_connected=bluetooth_connected,
+                        bluetooth_available=runtime_config.bluetooth_enabled,
                         control_click_feedback=(
                             lambda: control_click_feedback.click(software_volume, software_muted)
-                            if load_config().control_click_enabled
+                            if runtime_config.control_click_enabled
                             else None
                         ),
                         spoken_navigation_feedback=(
@@ -1484,6 +1512,7 @@ def handle_oled_input_events(
     control_click_feedback: Callable[[], None] | None = None,
     spoken_navigation_feedback: Callable[[SpokenSelection], None] | None = None,
     spoken_navigation_cancel: Callable[[], None] | None = None,
+    bluetooth_available: bool = True,
 ) -> tuple[DisplayFrame | None, int, bool, bool, list[MenuCommand], bool, bool]:
     frame: DisplayFrame | None = None
     menu_changed = False
@@ -1520,6 +1549,8 @@ def handle_oled_input_events(
 
         if event.name == "nav_hold":
             print("Navigation hold received")
+            if not bluetooth_available:
+                continue
             if spoken_navigation_cancel is not None:
                 spoken_navigation_cancel()
             previous_selection = menu.spoken_selection()
@@ -1970,7 +2001,7 @@ def main() -> None:
     parser.add_argument("--dc-pin", type=int, default=24)
     parser.add_argument("--reset-pin", type=int, default=25)
     parser.add_argument("--cs-pin", type=int, default=None)
-    parser.add_argument("--speed", type=int, default=1_000_000)
+    parser.add_argument("--speed", type=int, default=4_000_000)
     parser.add_argument("--refresh-seconds", type=float, default=DEFAULT_REFRESH_SECONDS)
     parser.add_argument("--status-refresh-seconds", type=float, default=DEFAULT_STATUS_REFRESH_SECONDS)
     parser.add_argument("--splash-seconds", type=float, default=DEFAULT_SPLASH_SECONDS)

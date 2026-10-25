@@ -55,7 +55,7 @@ class Sh1122Display:
         dc_pin: int = 24,
         reset_pin: int = 25,
         cs_pin: int | None = None,
-        max_speed_hz: int = 1_000_000,
+        max_speed_hz: int = 4_000_000,
     ) -> None:
         from gpiozero import OutputDevice
         from PIL import Image, ImageDraw, ImageFont
@@ -125,8 +125,11 @@ class Sh1122Display:
     def data(self, values: bytes | bytearray) -> None:
         self.dc.on()
         self.select()
-        for index in range(0, len(values), 4096):
-            self.spi.xfer2(list(values[index : index + 4096]))
+        if hasattr(self.spi, "writebytes2"):
+            self.spi.writebytes2(bytes(values))
+        else:
+            for index in range(0, len(values), 4096):
+                self.spi.xfer2(list(values[index : index + 4096]))
         self.deselect()
 
     def select(self) -> None:
@@ -139,13 +142,28 @@ class Sh1122Display:
 
     def clear(self) -> None:
         self.draw.rectangle((0, 0, self.width, self.height), fill=0)
+        self._last_frame = None
+        self._last_packed = None
         self.flush()
 
     def flush(self) -> None:
+        packed = pack_sh1122(self.image)
+        if packed == getattr(self, "_last_packed", None):
+            return
         self.command([0x00, 0x10, 0xB0])
-        self.data(pack_sh1122(self.image))
+        self.data(packed)
+        self._last_packed = packed
 
     def show(self, frame: DisplayFrame) -> None:
+        # The service asks for a new frame about seven times a second. Most of
+        # the time nothing changed: skip drawing, packing and the SPI transfer.
+        try:
+            unchanged = frame == getattr(self, "_last_frame", None)
+        except Exception:
+            unchanged = False
+        if unchanged:
+            return
+        self._last_frame = frame
         self.draw.rectangle((0, 0, self.width, self.height), fill=0)
         if isinstance(frame, SplashFrame):
             self.draw_splash(frame)
@@ -824,12 +842,19 @@ def scale_grayscale_value(value: int, percent: int) -> int:
     return round(value * (percent / 100))
 
 
+_HIGH_NIBBLE = bytes(value & 0xF0 for value in range(256))
+_LOW_NIBBLE = bytes(value >> 4 for value in range(256))
+
+
 def pack_sh1122(image) -> bytearray:
-    pixels = image.load()
-    packed = bytearray()
-    for y in range(image.height):
-        for x in range(0, image.width, 2):
-            left = pixels[x, y] >> 4
-            right = pixels[x + 1, y] >> 4
-            packed.append((left << 4) | right)
-    return packed
+    """Pack two 8-bit grey pixels into one byte (4 bit each) for the SH1122.
+
+    Done with bytes.translate and one big-integer OR instead of a Python loop
+    over every pixel; on a Pi Zero this is many times faster.
+    """
+    raw = image.convert("L").tobytes()
+    left = raw[0::2].translate(_HIGH_NIBBLE)
+    right = raw[1::2].translate(_LOW_NIBBLE)
+    length = len(left)
+    combined = int.from_bytes(left, "big") | int.from_bytes(right, "big")
+    return bytearray(combined.to_bytes(length, "big"))

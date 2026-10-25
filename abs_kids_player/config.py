@@ -56,6 +56,7 @@ class AppConfig:
     screen_saver_dim_percent: int = DEFAULT_SCREEN_SAVER_DIM_PERCENT
     sleep_timer_enabled: bool = False
     sleep_timer_minutes: int = DEFAULT_SLEEP_TIMER_MINUTES
+    bluetooth_enabled: bool = True
     podcasts: list[PodcastConfig] = field(default_factory=default_podcasts)
 
     @property
@@ -88,6 +89,7 @@ def load_config() -> AppConfig:
         screen_saver_dim_percent=valid_screen_saver_dim_percent(data.get("screen_saver_dim_percent")),
         sleep_timer_enabled=bool(data.get("sleep_timer_enabled", False)),
         sleep_timer_minutes=valid_sleep_timer_minutes(data.get("sleep_timer_minutes")),
+        bluetooth_enabled=bool(data.get("bluetooth_enabled", True)),
         podcasts=podcast_configs_from_json(data["podcasts"]) if "podcasts" in data else default_podcasts(),
     )
 

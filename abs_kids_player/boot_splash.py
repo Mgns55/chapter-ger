@@ -25,7 +25,7 @@ class BootSplashDisplay:
         spi_device: int = 0,
         dc_pin: int = 24,
         reset_pin: int = 25,
-        max_speed_hz: int = 1_000_000,
+        max_speed_hz: int = 4_000_000,
     ) -> None:
         import lgpio
         import spidev
@@ -113,7 +113,7 @@ def show_boot_splash(
     spi_device: int = 0,
     dc_pin: int = 24,
     reset_pin: int = 25,
-    speed: int = 1_000_000,
+    speed: int = 4_000_000,
     hold_seconds: float = 0.25,
     handoff_path: str = "",
     max_hold_seconds: float = 45.0,
@@ -186,7 +186,7 @@ def main() -> None:
     parser.add_argument("--spi-device", type=int, default=0)
     parser.add_argument("--dc-pin", type=int, default=24)
     parser.add_argument("--reset-pin", type=int, default=25)
-    parser.add_argument("--speed", type=int, default=1_000_000)
+    parser.add_argument("--speed", type=int, default=4_000_000)
     parser.add_argument("--hold-seconds", type=float, default=0.25)
     parser.add_argument("--handoff-path", default="")
     parser.add_argument("--max-hold-seconds", type=float, default=45.0)

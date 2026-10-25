@@ -4,6 +4,13 @@ All notable changes to Chapter Player for Audiobookshelf are documented here.
 
 ## Unreleased
 
+## [0.3.13] - 2026-10-25 (Mgns55/chapter-ger)
+
+- Deutsche Oberfläche für Display, Sprachnavigation und Setup-Seite (`CHAPTER_LANGUAGE=de`).
+- Bluetooth lässt sich in den Einstellungen der Setup-Seite ganz abschalten (Funk aus, kein Bluetooth-Menü, schnellere Seite).
+- Display: unveränderte Bilder werden nicht neu gesendet, schnellere Bildumwandlung, SPI-Takt 4 MHz statt 1 MHz.
+- WLAN-Status ohne Funknetz-Suche und nur alle 5 statt 2 Sekunden; Wiedergabestatus wird seltener auf die SD-Karte geschrieben.
+
 ## [0.3.12] - 2026-10-14
 
 - Added a configurable `1x`, `1.5x`, or `2x` playback speed setting with live updates and pitch-preserving audio.

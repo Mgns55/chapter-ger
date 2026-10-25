@@ -1283,6 +1283,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             "/player": self.handle_player_post,
             "/settings/click": self.handle_click_setting_post,
             "/settings/spoken-navigation": self.handle_spoken_navigation_setting_post,
+            "/settings/bluetooth": self.handle_bluetooth_setting_post,
             "/settings/library-order": self.handle_library_sort_setting_post,
             "/settings/playback-speed": self.handle_playback_speed_setting_post,
             "/settings/screensaver": self.handle_screen_saver_setting_post,
@@ -1416,6 +1417,15 @@ class SetupHandler(BaseHTTPRequestHandler):
             return
         enabled = one(fields, "enabled") == "1"
         save_click_setting(enabled)
+        self.redirect_home()
+
+    def handle_bluetooth_setting_post(self) -> None:
+        fields = self.post_fields()
+        if fields is None:
+            return
+        enabled = one(fields, "enabled") == "1"
+        save_bluetooth_setting(enabled)
+        apply_bluetooth_radio(enabled)
         self.redirect_home()
 
     def handle_spoken_navigation_setting_post(self) -> None:
@@ -1815,6 +1825,22 @@ def save_click_setting(enabled: bool) -> AppConfig:
     return updated
 
 
+def save_bluetooth_setting(enabled: bool) -> AppConfig:
+    config = load_config()
+    updated = replace(config, bluetooth_enabled=enabled)
+    save_config(updated)
+    return updated
+
+
+def apply_bluetooth_radio(enabled: bool, runner: SystemCommandRunner | None = None) -> None:
+    """Switch the Bluetooth radio on or off. bluetoothd keeps running, so status checks stay fast."""
+    runner = runner or run_system_command
+    try:
+        runner(["rfkill", "unblock" if enabled else "block", "bluetooth"])
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"Bluetooth radio change failed: {error}")
+
+
 def save_spoken_navigation_setting(enabled: bool) -> AppConfig:
     config = load_config()
     updated = replace(config, spoken_navigation_enabled=enabled)
@@ -1916,6 +1942,8 @@ def audiobookshelf_status() -> tuple[bool, str]:
 
 
 def bluetooth_status() -> tuple[bool, str]:
+    if not load_config().bluetooth_enabled:
+        return False, "Off"
     device = connected_bluetooth_audio_device()
     if device is None:
         return False, "Not connected"
@@ -2056,6 +2084,11 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
     spoken_navigation_button_label = (
         "Disable spoken navigation" if spoken_navigation_enabled else "Enable spoken navigation"
     )
+    bluetooth_enabled = config.bluetooth_enabled
+    bluetooth_next_value = "0" if bluetooth_enabled else "1"
+    bluetooth_toggle_class = " is-on" if bluetooth_enabled else ""
+    bluetooth_aria_pressed = "true" if bluetooth_enabled else "false"
+    bluetooth_button_label = "Disable Bluetooth" if bluetooth_enabled else "Enable Bluetooth"
     sleep_enabled = config.sleep_timer_enabled
     sleep_next_value = "0" if sleep_enabled else "1"
     sleep_toggle_class = " is-on" if sleep_enabled else ""
@@ -2102,6 +2135,18 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
             <input type="hidden" name="enabled" value="{spoken_navigation_next_value}">
             <button class="toggle-button{spoken_navigation_toggle_class}" type="submit" aria-pressed="{spoken_navigation_aria_pressed}">
               <span class="sr-only">{spoken_navigation_button_label}</span>
+            </button>
+          </form>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="setting-name">Bluetooth</div>
+          </div>
+          <form class="toggle-form" method="post" action="/settings/bluetooth">
+            {csrf_input}
+            <input type="hidden" name="enabled" value="{bluetooth_next_value}">
+            <button class="toggle-button{bluetooth_toggle_class}" type="submit" aria-pressed="{bluetooth_aria_pressed}">
+              <span class="sr-only">{bluetooth_button_label}</span>
             </button>
           </form>
         </div>
@@ -2174,6 +2219,10 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         spoken_navigation_toggle_class=spoken_navigation_toggle_class,
         spoken_navigation_aria_pressed=spoken_navigation_aria_pressed,
         spoken_navigation_button_label=spoken_navigation_button_label,
+        bluetooth_next_value=bluetooth_next_value,
+        bluetooth_toggle_class=bluetooth_toggle_class,
+        bluetooth_aria_pressed=bluetooth_aria_pressed,
+        bluetooth_button_label=bluetooth_button_label,
         library_sort_options=render_library_sort_options(config.library_sort_mode),
         playback_speed_options=render_playback_speed_options(config.playback_speed),
         screen_saver_options=render_screen_saver_options(config.screen_saver_mode),
@@ -2490,6 +2539,8 @@ def main() -> None:
         help="Start the setup hotspot if no Wi-Fi connection is active.",
     )
     args = parser.parse_args()
+    if not load_config().bluetooth_enabled:
+        apply_bluetooth_radio(False)
     if args.ensure_wifi:
         try:
             print(ensure_wifi_or_hotspot())

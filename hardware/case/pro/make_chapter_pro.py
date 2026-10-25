@@ -1,7 +1,7 @@
 """Chapter Pro, variant A ("Radio") - parametric printable case.
 
-Hardware: Raspberry Pi 3 A+ on a PiSugar 3 Plus (5000 mAh), 3.12" SSD1322 OLED
-(module up to 102 x 35 mm), Dayton Audio ND90-4 (rear-mounted behind a grille),
+Hardware: Raspberry Pi 3 A+ on a PiSugar 3 Plus (5000 mAh, 65 x 56 mm), 3.12" SSD1322
+OLED (UN312-5664-7: PCB 100.5 x 33.5 mm, holes 95 x 28.5 mm), Dayton Audio ND90-4 (rear-mounted behind a grille),
 MAX98357A, 2 x KY-040 on the top.
 
 Final coordinates: X = width (left -> right, seen from the front), Y = depth
@@ -9,10 +9,9 @@ Final coordinates: X = width (left -> right, seen from the front), Y = depth
 print orientation (no supports needed).
 
 Parts
-  chapter-pro-gehaeuse.stl        body, printed front face down
-  chapter-pro-rueckwand.stl       back panel with Pi/PiSugar standoffs, outer face down
+  chapter-pro-gehaeuse.stl         body, printed front face down
+  chapter-pro-rueckwand.stl        back panel with Pi/PiSugar holder, outer face down
   chapter-pro-lautsprecherring.stl clamp ring for the ND90-4
-  chapter-pro-displayklemmen.stl  4 clamps for the OLED module
 
 Usage: python3 make_chapter_pro.py [output dir]
 """
@@ -52,12 +51,21 @@ SPK_BOSS_OFFSET = 41.0                        # bosses on the diagonals, r = 58 
 SPK_BOSS_R, SPK_BOSS_H = 4.5, 4.0
 SPK_LIP = (52.5, 54.0, 2.0)                   # centring lip r_in, r_out, height (frame 104 mm)
 
-# OLED 3.12" SSD1322 - visible area 76.8 x 19.2 mm
-OLED = (167.0, 92.0)                          # centre (x, z)
-OLED_WIN = (80.0, 23.0)                       # window at the front face
+# OLED 3.12" SSD1322 (drawing UN312-5664-7, seen from the front, pins on the right):
+# PCB 100.5 x 33.5, holes 4 x 3.2 mm on 95 x 28.5, glass 89.5 x 29.8 (1.4 mm below the
+# PCB top, 5.0 mm from the left edge), active area 76.78 x 19.18 (5.1 mm below the
+# PCB top, 12.36 mm from the right edge).
+OLED = (167.0, 92.0)                          # centre of the active area (x, z)
+OLED_WIN = (80.0, 23.0)                       # window at the front face (visible area 78.8 x 21.2)
 OLED_CHAMFER = 3.0                            # window grows by 3 mm per side towards the inside
-OLED_BOSSES = [(167.0 + dx, 92.0 + dz) for dx in (-32.0, 32.0) for dz in (-24.0, 24.0)]
-OLED_BOSS_R, OLED_BOSS_H = 3.5, 3.5
+OLED_PCB = (100.5, 33.5)
+OLED_PCB_CENTRE = (OLED[0] + (100.5 / 2 - 12.36 - 76.78 / 2) * -1.0,   # active area 0.5 mm left of PCB centre
+                   OLED[1] - (33.5 / 2 - 5.1 - 19.18 / 2))             # and 2.06 mm above it
+OLED_HOLES = [(OLED_PCB_CENTRE[0] + dx, OLED_PCB_CENTRE[1] + dz) for dx in (-47.5, 47.5) for dz in (-14.25, 14.25)]
+OLED_GLASS = (OLED_PCB_CENTRE[0] - 100.5 / 2 + 5.0, OLED_PCB_CENTRE[1] + 33.5 / 2 - 1.4 - 29.8,
+              OLED_PCB_CENTRE[0] - 100.5 / 2 + 5.0 + 89.5, OLED_PCB_CENTRE[1] + 33.5 / 2 - 1.4)
+OLED_BOSS_R, OLED_BOSS_H = 3.0, 2.6           # PCB sits 2.6 mm behind the front wall (glass + tape)
+OLED_PILOT_R = 1.05                           # 2.1 mm pilot for 2.5 x 6 mm self-tapping screws
 
 # encoders on the top
 KNOBS = [("Menü", 144.5), ("Lautstärke", 189.5)]
@@ -69,9 +77,11 @@ LABEL_CAP = 4.5
 ENGRAVE = 1.0
 FONT = FontProperties(family="DejaVu Serif")
 
-# Pi 3 A+ / PiSugar 3 Plus on the back panel: 58 x 49 mm hole pattern
-PI_CENTRE = (167.0, 43.0)
-PI_STANDOFF_H, PI_STANDOFF_R = 18.0, 3.5      # leaves room for the 5000 mAh cell under the PiSugar
+# Pi 3 A+ + PiSugar 3 Plus stack (both 65 x 56 mm) lies battery-down on the back panel:
+# four corner guides + two loops for a hook-and-loop strap, ports stay free on all edges
+PI_CENTRE = (167.0, 42.0)                     # (x, z)
+PI_SIZE = (65.0, 56.0)
+PI_GUIDE_H, PI_GUIDE_LEG, PI_GUIDE_T = 12.0, 9.0, 2.0
 
 # back panel openings
 USB = (135.0, 105.0)                          # USB-C panel-mount extension (x, z)
@@ -183,12 +193,16 @@ def build_body() -> mf.Manifold:
     window = mf.Manifold.batch_hull([front, back])
     window += mf.Manifold.cube([ww, 1.2, wh]).translate([ox - ww / 2, -0.6, oz - wh / 2])
     body -= window
-    body += union([cyl_y(x, z, FRONT_T - 0.1, FRONT_T + OLED_BOSS_H, OLED_BOSS_R) for x, z in OLED_BOSSES])
-    body -= union([cyl_y(x, z, FRONT_T + OLED_BOSS_H - 5.0, FRONT_T + OLED_BOSS_H + 1, M25_INSERT_R)
-                   for x, z in OLED_BOSSES])
+    # standoffs at the module's four holes, trimmed where they would touch the glass
+    gx0, gz0, gx1, gz1 = OLED_GLASS
+    glass_keepout = prism_y(box(gx0 - 0.4, gz0 - 0.4, gx1 + 0.4, gz1 + 0.4), FRONT_T - 0.5, FRONT_T + 10)
+    bosses = union([cyl_y(x, z, FRONT_T - 0.1, FRONT_T + OLED_BOSS_H, OLED_BOSS_R) for x, z in OLED_HOLES])
+    body += bosses - glass_keepout
+    body -= union([cyl_y(x, z, FRONT_T + OLED_BOSS_H - 5.0, FRONT_T + OLED_BOSS_H + 1, OLED_PILOT_R, 24)
+                   for x, z in OLED_HOLES])
 
-    # "Chapter" engraved under the display (0.6 mm)
-    name = text_solid("Chapter", cap_size(6.5), 1.6).rotate([90, 0, 0])   # letters in x/z, depth -y
+    # "Franz Pro" engraved under the display (0.6 mm)
+    name = text_solid("Franz Pro", cap_size(6.5), 1.6).rotate([90, 0, 0])   # letters in x/z, depth -y
     body -= name.translate([ox, 0.6, 58.0])
 
     # knobs on the top: holes, thinned wall under the nut, engraved labels
@@ -208,7 +222,7 @@ def build_body() -> mf.Manifold:
             body -= cyl_z(x, y, -1, 1.0, 5.5)
 
     # cable pass-through speaker chamber -> electronics (seal with hot glue)
-    body -= cyl_x(60.0, 20.0, 105.0, 118.0, 2.5)
+    body -= cyl_x(85.0, 20.0, 105.0, 118.0, 3.0)
     return body
 
 
@@ -230,12 +244,29 @@ def build_back_panel() -> mf.Manifold:
     panel -= union([cyl_y(x, z, y_in - 4, y_out + 1, 1.7) for x, z in COLUMNS])
     panel -= union([cyl_y(x, z, y_out - 2.0, y_out + 1, 3.3) for x, z in COLUMNS])
 
-    # Pi 3 A+ / PiSugar standoffs (M2.5 inserts)
+    # Pi 3 A+ / PiSugar holder: L-shaped corner guides (0.5 mm play) and two strap loops
     px, pz = PI_CENTRE
-    pi_holes = [(px + dx, pz + dz) for dx in (-29.0, 29.0) for dz in (-24.5, 24.5)]
-    panel += union([cyl_y(x, z, y_in - PI_STANDOFF_H, y_in + 0.1, PI_STANDOFF_R) for x, z in pi_holes])
-    panel -= union([cyl_y(x, z, y_in - PI_STANDOFF_H - 1, y_in - PI_STANDOFF_H + 6.0, M25_INSERT_R)
-                    for x, z in pi_holes])
+    hw, hh = PI_SIZE[0] / 2 + 0.5, PI_SIZE[1] / 2 + 0.5
+    guides = []
+    for sx_ in (-1, 1):
+        for sz_ in (-1, 1):
+            cx, cz = px + sx_ * hw, pz + sz_ * hh          # inner corner of the guide
+            leg = PI_GUIDE_LEG
+            t = PI_GUIDE_T
+            a = box(min(cx, cx + sx_ * t), min(cz - sz_ * leg, cz + sz_ * t),
+                    max(cx, cx + sx_ * t), max(cz - sz_ * leg, cz + sz_ * t))
+            b = box(min(cx - sx_ * leg, cx + sx_ * t), min(cz, cz + sz_ * t),
+                    max(cx - sx_ * leg, cx + sx_ * t), max(cz, cz + sz_ * t))
+            guides.append(prism_y(a.union(b), y_in - PI_GUIDE_H, y_in + 0.1))
+    panel += union(guides)
+    loops = []
+    for sx_ in (-1, 1):                                    # strap runs vertically over the stack
+        x = px + sx_ * 16.0
+        for z in (pz - hh - 6.0, pz + hh + 6.0):
+            loop = prism_y(rrect(x - 8.0, z - 2.5, x + 8.0, z + 2.5, 1.0), y_in - 5.5, y_in + 0.1)
+            loop -= prism_y(box(x - 6.5, z - 3.0, x + 6.5, z + 3.0), y_in - 3.0, y_in + 1.0)
+            loops.append(loop)
+    panel += union(loops)
 
     # USB-C panel-mount socket: 12.5 x 6.5 opening, M3 slots for 25-32 mm hole spacing
     ux, uz = USB
@@ -294,7 +325,6 @@ def main(out_dir="."):
         "chapter-pro-gehaeuse.stl": to_print_body(build_body()),
         "chapter-pro-rueckwand.stl": to_print_panel(build_back_panel()),
         "chapter-pro-lautsprecherring.stl": build_speaker_ring(),
-        "chapter-pro-displayklemmen.stl": build_display_clamps(),
     }
     for name, m in parts.items():
         mesh = to_trimesh(m)

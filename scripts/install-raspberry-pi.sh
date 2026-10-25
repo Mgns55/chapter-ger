@@ -236,7 +236,7 @@ sync_project() {
 
   if [[ -d "${INSTALL_DIR}/.git" ]]; then
     sudo_run chown -R "$INSTALL_USER:$INSTALL_USER" "$INSTALL_DIR"
-    as_install_user git -C "$INSTALL_DIR" fetch --tags origin
+    as_install_user git -C "$INSTALL_DIR" fetch --force --tags origin
     as_install_user git -C "$INSTALL_DIR" checkout --force --detach "$RELEASE_REF"
     return
   fi

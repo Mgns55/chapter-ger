@@ -120,6 +120,12 @@ DISPLAY = {
     "Bluetooth connected": "Bluetooth verbunden",
     "Connected": "Verbunden",
     "Not connected": "Nicht verbunden",
+    "Profile": "Profil",
+    "Battery low": "Akku fast leer",
+    "Please charge": "Bitte aufladen",
+    "Battery empty": "Akku leer",
+    "Switching off": "Schalte aus",
+    "Switching profile": "Wechsle Profil",
 }
 
 DIRECTION = {"previous": "vorherige", "next": "nächste"}
@@ -135,6 +141,8 @@ DISPLAY_PATTERNS: list[tuple[re.Pattern, Replacement]] = [
     (re.compile(r"^Browse to (.+)$"), r"Öffne \1"),
     (re.compile(r"^By (.+)$"), r"von \1"),
     (re.compile(r"^Volume (\d+)%$"), r"Lautstärke \1 %"),
+    (re.compile(r"^Series with (\d+) titles$"), r"Serie · \1 Titel"),
+    (re.compile(r"^(.+) \(active\)$"), r"\1 (aktiv)"),
 ]
 
 
@@ -152,6 +160,9 @@ SPOKEN = {
 }
 
 SPOKEN_PATTERNS: list[tuple[re.Pattern, Replacement]] = [
+    (re.compile(r"^Series (.+)$"), r"Serie \1"),
+    (re.compile(r"^Battery low\. Please charge\.$"), "Akku fast leer. Bitte aufladen."),
+    (re.compile(r"^Battery empty\. Switching off\.$"), "Akku leer. Ich schalte mich jetzt aus."),
     (re.compile(r"^Volume (\d+) percent$"), r"Lautstärke \1 Prozent"),
 ]
 
@@ -225,6 +236,41 @@ WEB = {
     "Enable sleep timer": "Einschlaf-Timer einschalten",
     "Enable Bluetooth": "Bluetooth einschalten",
     "Offline storage": "Offline-Speicher",
+    "Group series": "Serien zusammenfassen",
+    "Enable series grouping": "Serien zusammenfassen einschalten",
+    "Disable series grouping": "Serien zusammenfassen ausschalten",
+    "Amplifier off when idle": "Verstärker im Leerlauf aus",
+    "SD pin of the amplifier on GPIO 17 (pin 11)": "SD-Pin des Verstärkers an GPIO 17 (Pin 11)",
+    "Keep amplifier on": "Verstärker eingeschaltet lassen",
+    "Switch amplifier off when idle": "Verstärker im Leerlauf abschalten",
+    "Display": "Display",
+    "2.08 inch": "2,08 Zoll",
+    "3.12 inch": "3,12 Zoll",
+    "3.12 inch rotated": "3,12 Zoll gedreht",
+    "Listening": "Hörzeit",
+    "Nothing listened yet.": "Noch nichts gehört.",
+    "Player": "Player",
+    "Most played (30 days)": "Am meisten gehört (30 Tage)",
+    "Profiles": "Profile",
+    "Active": "Aktiv",
+    "Activate": "Aktivieren",
+    "Remove": "Entfernen",
+    "Profile name (optional)": "Profilname (optional)",
+    "e.g. a child's name": "z. B. Name des Kindes",
+    "No profiles yet. Log in above with a profile name to add one, e.g. one Audiobookshelf user per child.":
+        "Noch keine Profile. Melde dich oben mit einem Profilnamen an, um eins anzulegen – z. B. ein Audiobookshelf-Benutzer pro Kind.",
+    "With two or more profiles, hold the menu knob for 3 seconds on the player to switch.":
+        "Ab zwei Profilen: Menü-Knopf am Player 3 Sekunden gedrückt halten, um zu wechseln.",
+    "Home Assistant (MQTT)": "Home Assistant (MQTT)",
+    "The player appears in Home Assistant automatically (MQTT discovery): status, title, chapter, battery, listening time, volume and play/pause.":
+        "Der Player erscheint automatisch in Home Assistant (MQTT-Discovery): Status, Titel, Kapitel, Akku, Hörzeit, Lautstärke und Abspielen/Pause.",
+    "Enable MQTT": "MQTT aktivieren",
+    "MQTT broker": "MQTT-Broker",
+    "Port": "Port",
+    "Saved - leave empty to keep": "Gespeichert – leer lassen zum Beibehalten",
+    "Save Home Assistant Settings": "Home-Assistant-Einstellungen speichern",
+    "Home Assistant settings saved.": "Home-Assistant-Einstellungen gespeichert.",
+    "Unknown profile.": "Unbekanntes Profil.",
     "Clear": "Leeren",
     "No books stored yet": "Noch keine Bücher gespeichert",
     "Not available": "Nicht verfügbar",
@@ -313,6 +359,12 @@ WEB = {
 
 WEB_PATTERNS: list[tuple[re.Pattern, Replacement]] = [
     (re.compile(r"^1 book stored · (.+)$"), r"1 Buch gespeichert · \1"),
+    (re.compile(r"^Today: (.+)$"), r"Heute: \1"),
+    (re.compile(r"^Last 7 days: (.+)$"), r"Letzte 7 Tage: \1"),
+    (re.compile(r"^· last: (\S+)$"), r"· zuletzt: \1 Uhr"),
+    (re.compile(r"^· last: (\S+) · after 8 pm: (.+)$"), r"· zuletzt: \1 Uhr · nach 20 Uhr: \2"),
+    (re.compile(r"^· after 8 pm: (.+)$"), r"· nach 20 Uhr: \1"),
+    (re.compile(r"^Switching to profile (.+)\.$"), r"Wechsle zu Profil \1."),
     (re.compile(r"^(\d+) books stored · (.+)$"), r"\1 Bücher gespeichert · \2"),
     (re.compile(r"^Logged in to (.+) as (.+)$"), r"Angemeldet bei \1 als \2"),
     (re.compile(r"^Logged in to (.+)$"), r"Angemeldet bei \1"),

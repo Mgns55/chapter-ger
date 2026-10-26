@@ -4,6 +4,18 @@ All notable changes to Chapter Player for Audiobookshelf are documented here.
 
 ## Unreleased
 
+## [0.3.18] - 2026-10-26 (Mgns55/chapter-ger)
+
+- Serien werden im Menü zu einem Eintrag zusammengefasst; Auswahl öffnet die Folgen in Reihenfolge (mit "Zurück").
+- Profile: mehrere Audiobookshelf-Logins, Wechsel per langem Druck auf den Menü-Knopf, auf der Setup-Seite oder aus Home Assistant.
+- PiSugar-3-Akku: Anzeige im Display, Warnung bei 15 %, sauberes Herunterfahren bei 5 % (sudoers-Regel für poweroff).
+- Treiber für 3,12"-OLED mit SSD1322 (auch für den Boot-Splash), zweizeilige Titel auf dem großen Display.
+- Verstärker kann im Leerlauf über GPIO 17 abgeschaltet werden (gegen Knacken).
+- Home-Assistant-Anbindung per MQTT mit Discovery (eigener Dienst audiobookshelf-player-mqtt).
+- Hörzeit-Übersicht für Eltern auf der Setup-Seite.
+- Ohne WLAN bleibt das Menü bedienbar, gespeicherte Bücher spielen offline.
+- Installer: I2C an, HDMI-Ton aus (dtoverlay=vc4-kms-v3d,noaudio), Pakete i2c-tools und python3-paho-mqtt.
+
 ## [0.3.17] - 2026-10-26 (Mgns55/chapter-ger)
 
 - Offline-Speicher: Hörbücher werden beim ersten Abspielen im Hintergrund auf die SD-Karte geladen. Danach startet die Wiedergabe aus der lokalen Datei und funktioniert auch ohne WLAN.

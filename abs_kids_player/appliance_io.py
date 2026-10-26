@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 from . import i18n
+from .ssd1322_sequence import SSD1322_INIT_SEQUENCE
 from .rotary_ui import (
     BluetoothDevicesFrame,
     BluetoothMenuFrame,
@@ -15,6 +16,7 @@ from .rotary_ui import (
     DisplayFrame,
     HomeFrame,
     PlayingFrame,
+    ProfileMenuFrame,
     ResumeChoiceFrame,
     ScreenSaverFrame,
     SleepConfirmFrame,
@@ -47,6 +49,10 @@ class Sh1122Display:
     height = 64
     default_contrast = 0x80
     brightness_gamma = 2.2
+    # The 3.12" panel has bigger pixels: there titles may use a smaller font
+    # and wrap onto two lines instead of scrolling.
+    large_layout = False
+    battery: tuple[int, bool] | None = None      # (percent, charging) when a battery is fitted
 
     def __init__(
         self,
@@ -69,6 +75,9 @@ class Sh1122Display:
         self.font_section_letter = load_font(ImageFont, 20)
         self.font_top = load_font(ImageFont, 16)
         self.font_bottom = load_font(ImageFont, 12)
+        self.font_two_line = load_font(ImageFont, 15)
+        self.font_two_line_small = load_font(ImageFont, 13)
+        self.font_battery = load_font(ImageFont, 10)
         self.font_screen_saver = load_screen_saver_fonts(ImageFont)
         self.dc = OutputDevice(dc_pin, initial_value=False)
         self.reset = OutputDevice(reset_pin, initial_value=True)
@@ -157,13 +166,14 @@ class Sh1122Display:
     def show(self, frame: DisplayFrame) -> None:
         # The service asks for a new frame about seven times a second. Most of
         # the time nothing changed: skip drawing, packing and the SPI transfer.
+        state = (frame, self.battery)
         try:
-            unchanged = frame == getattr(self, "_last_frame", None)
+            unchanged = state == getattr(self, "_last_frame", None)
         except Exception:
             unchanged = False
         if unchanged:
             return
-        self._last_frame = frame
+        self._last_frame = state
         self.draw.rectangle((0, 0, self.width, self.height), fill=0)
         if isinstance(frame, SplashFrame):
             self.draw_splash(frame)
@@ -187,6 +197,8 @@ class Sh1122Display:
             self.draw_bluetooth_menu(frame)
         elif isinstance(frame, BluetoothDevicesFrame):
             self.draw_bluetooth_devices(frame)
+        elif isinstance(frame, ProfileMenuFrame):
+            self.draw_bluetooth_devices(frame)
         elif isinstance(frame, WifiSetupFrame):
             self.draw_wifi_setup(frame)
         else:
@@ -197,6 +209,9 @@ class Sh1122Display:
             self.draw_muted_icon(x=2)
         if bluetooth_connected:
             self.draw_bluetooth_icon(x=24 if muted else 2)
+        if self.battery is not None and not isinstance(frame, (ScreenSaverFrame, SplashFrame)):
+            self.draw_battery(x=2 + 22 * (int(muted) + int(bluetooth_connected)), percent=self.battery[0],
+                              charging=self.battery[1])
         if isinstance(frame, ScreenSaverFrame):
             self.apply_grayscale_brightness(frame.brightness_percent)
         self.flush()
@@ -225,7 +240,13 @@ class Sh1122Display:
         if frame.is_podcast:
             self.draw_right_aligned_text("PODCAST", self.font_bottom, y=0, right=self.width - 2, fill=140)
         title_y = 12
-        if text_width(self.draw, frame.title, self.font_home_title) > self.width:
+        lines = self.two_lines(frame.title, self.font_two_line) if self.large_layout else None
+        if lines is not None:
+            self.draw_centered_text(lines[0], self.font_two_line, y=12, fill=255)
+            self.draw_centered_text(lines[1], self.font_two_line, y=28, fill=255)
+            author = fit_text(self.draw, frame.bottom, self.font_bottom, self.width - 60)
+            self.draw_centered_text(author, self.font_bottom, y=48, fill=180)
+        elif text_width(self.draw, frame.title, self.font_home_title) > self.width:
             self.draw_scrolling_text(
                 frame.title,
                 self.font_home_title,
@@ -236,8 +257,9 @@ class Sh1122Display:
         else:
             title = fit_text(self.draw, frame.title, self.font_home_title, self.width)
             self.draw_centered_text(title, self.font_home_title, y=title_y, fill=255)
-        author = fit_text(self.draw, frame.bottom, self.font_home_author, self.width)
-        self.draw_centered_text(author, self.font_home_author, y=34, fill=180)
+        if lines is None:
+            author = fit_text(self.draw, frame.bottom, self.font_home_author, self.width)
+            self.draw_centered_text(author, self.font_home_author, y=34, fill=180)
         if frame.series_position:
             self.draw_bottom_left_text(frame.series_position, self.font_bottom, fill=140, margin=3)
         if frame.section_letter and frame.section_letter_fill > 0:
@@ -276,7 +298,11 @@ class Sh1122Display:
 
         title_y = 18
         chapter = frame.chapter_text
-        if text_width(self.draw, chapter, self.font_top) > self.width:
+        lines = self.two_lines(chapter, self.font_two_line_small) if self.large_layout else None
+        if lines is not None:
+            self.draw_centered_text(lines[0], self.font_two_line_small, y=11, fill=255)
+            self.draw_centered_text(lines[1], self.font_two_line_small, y=24, fill=255)
+        elif text_width(self.draw, chapter, self.font_top) > self.width:
             self.draw_scrolling_text(
                 chapter,
                 self.font_top,
@@ -401,6 +427,33 @@ class Sh1122Display:
         y = box_top + max(0, (box_bottom - box_top - (bottom - top)) // 2) - top
         self.draw.text((x, y), text, font=font, fill=fill)
 
+    def two_lines(self, text: str, font) -> tuple[str, str] | None:
+        """Split `text` into two centred lines when it is too wide for one; None if it does not fit."""
+        text = oled_safe_text(text)
+        if text_width(self.draw, text, self.font_home_title) <= self.width:
+            return None
+        words = text.split()
+        best: tuple[str, str] | None = None
+        for cut in range(1, len(words)):
+            first, second = " ".join(words[:cut]), " ".join(words[cut:])
+            if text_width(self.draw, first, font) <= self.width - 4 and text_width(self.draw, second, font) <= self.width - 4:
+                balance = abs(len(first) - len(second))
+                if best is None or balance < abs(len(best[0]) - len(best[1])):
+                    best = (first, second)
+        return best
+
+    def draw_battery(self, x: int, percent: int, charging: bool) -> None:
+        y = 2
+        width, height = 18, 9
+        self.draw.rectangle((x, y, x + width, y + height), outline=200)
+        self.draw.rectangle((x + width + 1, y + 3, x + width + 2, y + height - 3), fill=200)
+        level = max(0, min(100, int(percent)))
+        fill_width = round((width - 3) * level / 100)
+        if fill_width > 0:
+            self.draw.rectangle((x + 2, y + 2, x + 1 + fill_width, y + height - 2), fill=255 if level > 15 else 140)
+        label = f"{level}%" + (" +" if charging else "")
+        self.draw.text((x + width + 5, y - 1), label, font=self.font_battery, fill=170)
+
     def draw_muted_icon(self, x: int = 2) -> None:
         y = 1
         self.draw.rectangle((x, y + 5, x + 4, y + 10), outline=255)
@@ -441,6 +494,61 @@ class Sh1122Display:
     def close(self) -> None:
         self.command([0xAE])
         self.spi.close()
+
+
+class Ssd1322Display(Sh1122Display):
+    """3.12" 256 x 64 OLED with SSD1322 controller (e.g. UN312-5664-7), 4-wire SPI.
+
+    Same pixel format as the SH1122 (4-bit grey, two pixels per byte, left
+    pixel in the high nibble), but a different command set: commands are sent
+    with DC low and their parameters with DC high.
+    """
+
+    default_contrast = 0x9F
+    large_layout = True
+    column_start = 0x1C          # 256 px panels use columns 28..91 of the 480 px RAM
+    column_end = 0x5B
+
+    def __init__(self, *args, flipped: bool = False, **kwargs) -> None:
+        self.flipped = flipped
+        super().__init__(*args, **kwargs)
+
+    def cmd(self, command: int, *params: int) -> None:
+        self.command([command])
+        if params:
+            self.data(bytes(params))
+
+    def init_display(self) -> None:
+        for command, *params in SSD1322_INIT_SEQUENCE:
+            self.cmd(command, *params)
+        self.clear()
+
+    def set_brightness(self, percent: int) -> None:
+        percent = min(max(int(percent), 0), 100)
+        contrast = round(self.default_contrast * ((percent / 100) ** self.brightness_gamma))
+        self.cmd(0xC1, contrast)
+
+    def flush(self) -> None:
+        image = self.image.rotate(180) if self.flipped else self.image
+        packed = pack_sh1122(image)
+        if packed == getattr(self, "_last_packed", None):
+            return
+        self.cmd(0x15, self.column_start, self.column_end)
+        self.cmd(0x75, 0x00, self.height - 1)
+        self.cmd(0x5C)
+        self.data(packed)
+        self._last_packed = packed
+
+    def close(self) -> None:
+        self.cmd(0xAE)
+        self.spi.close()
+
+
+def create_display(display_type: str, **kwargs) -> Sh1122Display:
+    """Display driver for the configured panel type (see config.DISPLAY_TYPES)."""
+    if display_type in ("ssd1322", "ssd1322_flipped"):
+        return Ssd1322Display(flipped=display_type == "ssd1322_flipped", **kwargs)
+    return Sh1122Display(**kwargs)
 
 
 @dataclass(frozen=True)

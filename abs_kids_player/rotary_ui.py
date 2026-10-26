@@ -22,6 +22,8 @@ class Screen(str, Enum):
     SLEEP_CONFIRM = "sleep_confirm"
     BLUETOOTH = "bluetooth"
     BLUETOOTH_DEVICES = "bluetooth_devices"
+    SERIES = "series"
+    PROFILE = "profile"
 
 
 class CommandType(str, Enum):
@@ -39,6 +41,7 @@ class CommandType(str, Enum):
     PAIR_BLUETOOTH_DEVICE = "pair_bluetooth_device"
     UNPAIR_BLUETOOTH_DEVICE = "unpair_bluetooth_device"
     CONFIRM_STILL_LISTENING = "confirm_still_listening"
+    SWITCH_PROFILE = "switch_profile"
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,7 @@ class MenuCommand:
     bluetooth_enabled: bool = False
     bluetooth_device_address: str = ""
     bluetooth_device_name: str = ""
+    profile_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,8 @@ class HomeFrame:
     muted: bool = False
     bluetooth_connected: bool = False
     is_podcast: bool = False
+    series_count: int = 0          # > 0: this entry is a whole series
+    is_back: bool = False          # the "Back" entry inside a series
 
     @property
     def top(self) -> str:
@@ -83,6 +89,8 @@ class HomeFrame:
 
     @property
     def bottom(self) -> str:
+        if self.series_count:
+            return f"Series with {self.series_count} titles"
         return author_line(self.author)
 
 
@@ -268,6 +276,24 @@ class BluetoothDevicesFrame:
 
 
 @dataclass(frozen=True)
+class ProfileMenuFrame:
+    name: str
+    selected_index: int
+    total_count: int
+    active: bool = False
+    muted: bool = False
+    bluetooth_connected: bool = False
+
+    @property
+    def top(self) -> str:
+        return "Profile"
+
+    @property
+    def bottom(self) -> str:
+        return f"{self.name} (active)" if self.active else self.name
+
+
+@dataclass(frozen=True)
 class WifiSetupFrame:
     ssid: str
     url: str
@@ -296,6 +322,7 @@ DisplayFrame = Union[
     StartupResumeFrame,
     BluetoothMenuFrame,
     BluetoothDevicesFrame,
+    ProfileMenuFrame,
     WifiSetupFrame,
 ]
 
@@ -358,10 +385,94 @@ class ApplianceMenu:
         self.section_letter = ""
         self.section_letter_fill = 0
         self._section_letter_elapsed = 0.0
+        self.group_series = True
+        self.entries: list[LibraryEntry] = []
+        self.entry_index = 0
+        self.open_series = ""
+        self.series_index = 0
+        self.resume_return_screen = Screen.LIBRARY
+        self.profiles: list[str] = []
+        self.active_profile = ""
+        self.profile_index = 0
+        self.profile_return_screen = Screen.LIBRARY
+        self.rebuild_entries()
+
+    # ------------------------------------------------------------ library entries
+    def set_group_series(self, enabled: bool) -> None:
+        if enabled == self.group_series:
+            return
+        self.group_series = enabled
+        self.rebuild_entries()
+
+    def rebuild_entries(self, keep_book_id: str = "") -> None:
+        """Top level of the library: single books plus one entry per series."""
+        keep_book_id = keep_book_id or (self.books[self.book_index].id if self.books else "")
+        self.entries = library_entries(self.books, self.group_series)
+        if self.open_series and not any(e.series == self.open_series for e in self.entries):
+            self.open_series = ""
+            if self.screen == Screen.SERIES:
+                self.screen = Screen.LIBRARY
+        self.entry_index = self.entry_index_for_book(keep_book_id)
+        self.sync_book_index_from_entry()
+
+    def entry_index_for_book(self, book_id: str) -> int:
+        for index, entry in enumerate(self.entries):
+            if any(self.books[i].id == book_id for i in entry.book_indexes):
+                return index
+        return min(self.entry_index, max(0, len(self.entries) - 1))
+
+    @property
+    def current_entry(self) -> "LibraryEntry | None":
+        if not self.entries:
+            return None
+        return self.entries[min(self.entry_index, len(self.entries) - 1)]
+
+    @property
+    def series_books(self) -> list[int]:
+        entry = next((e for e in self.entries if e.series == self.open_series), None)
+        return entry.book_indexes if entry else []
+
+    def sync_book_index_from_entry(self) -> None:
+        entry = self.current_entry
+        if entry is not None and entry.book_indexes:
+            if self.book_index not in entry.book_indexes:
+                self.book_index = entry.book_indexes[0]
+
+    def open_series_entry(self, entry: "LibraryEntry") -> None:
+        self.open_series = entry.series
+        books = [self.books[i] for i in entry.book_indexes]
+        start = next((n for n, b in enumerate(books) if b.has_play_history), None)
+        if start is None:
+            start = next((n for n, b in enumerate(books) if b.progress < 0.995), 0)
+        self.series_index = start + 1           # 0 is "Back"
+        self.book_index = entry.book_indexes[start]
+        self.screen = Screen.SERIES
+
+    # ------------------------------------------------------------ profiles
+    def set_profiles(self, names: list[str], active: str) -> None:
+        self.profiles = list(names)
+        self.active_profile = active
+
+    def open_profile_menu(self) -> None:
+        if self.screen != Screen.PROFILE:
+            self.profile_return_screen = self.screen
+        options = self.profile_options
+        self.profile_index = next(
+            (i for i, name in enumerate(options) if name == self.active_profile), 0
+        )
+        self.screen = Screen.PROFILE
+
+    @property
+    def profile_options(self) -> list[str]:
+        return ["Back", *self.profiles]
 
     def set_books(self, books: list[Book]) -> None:
+        keep_book_id = self.books[self.book_index].id if self.books and self.book_index < len(self.books) else ""
         self.books = books
         self.book_index = min(self.book_index, max(0, len(books) - 1))
+        if keep_book_id:
+            self.book_index = next((i for i, b in enumerate(books) if b.id == keep_book_id), self.book_index)
+        self.rebuild_entries(keep_book_id)
         if not books:
             self.clear_section_letter()
             self.screen = Screen.LIBRARY
@@ -419,8 +530,18 @@ class ApplianceMenu:
 
     def rotate_nav_once(self, direction: int) -> None:
         if self.screen == Screen.LIBRARY:
-            self.book_index = wrap_index(self.book_index + direction, len(self.books))
+            self.entry_index = wrap_index(self.entry_index + direction, len(self.entries))
+            entry = self.current_entry
+            if entry is not None and entry.book_indexes:
+                self.book_index = entry.book_indexes[0]
             self.show_section_letter()
+        elif self.screen == Screen.SERIES:
+            books = self.series_books
+            self.series_index = wrap_index(self.series_index + direction, len(books) + 1)
+            if self.series_index > 0:
+                self.book_index = books[self.series_index - 1]
+        elif self.screen == Screen.PROFILE:
+            self.profile_index = wrap_index(self.profile_index + direction, len(self.profile_options))
         elif self.screen == Screen.STARTUP_RESUME:
             self.startup_resume_index = clamp(self.startup_resume_index + direction, 0, 1)
         elif self.screen == Screen.RESUME_CHOICE:
@@ -451,10 +572,36 @@ class ApplianceMenu:
 
     def click_nav(self) -> list[MenuCommand]:
         if self.screen == Screen.LIBRARY:
-            if self.books:
-                self.resume_choice_index = self.default_resume_choice_index
-                self.screen = Screen.RESUME_CHOICE
+            entry = self.current_entry
+            if entry is None:
+                return []
+            if entry.series:
+                self.open_series_entry(entry)
+                return []
+            self.book_index = entry.book_indexes[0]
+            self.resume_return_screen = Screen.LIBRARY
+            self.resume_choice_index = self.default_resume_choice_index
+            self.screen = Screen.RESUME_CHOICE
             return []
+
+        if self.screen == Screen.SERIES:
+            if self.series_index == 0:
+                self.screen = Screen.LIBRARY
+                return []
+            self.book_index = self.series_books[self.series_index - 1]
+            self.resume_return_screen = Screen.SERIES
+            self.resume_choice_index = self.default_resume_choice_index
+            self.screen = Screen.RESUME_CHOICE
+            return []
+
+        if self.screen == Screen.PROFILE:
+            choice = self.profile_options[self.profile_index]
+            self.screen = self.profile_return_screen
+            if choice == "Back" and self.profile_index == 0:
+                return []
+            if choice == self.active_profile:
+                return []
+            return [MenuCommand(CommandType.SWITCH_PROFILE, profile_name=choice)]
 
         if self.screen == Screen.STARTUP_RESUME:
             state = self.startup_resume_state
@@ -475,7 +622,7 @@ class ApplianceMenu:
             book = self.books[self.book_index]
             choice = self.resume_options[self.resume_choice_index]
             if choice == "Home":
-                self.screen = Screen.LIBRARY
+                self.screen = self.resume_return_screen if self.resume_return_screen == Screen.SERIES else Screen.LIBRARY
                 return [MenuCommand(CommandType.HOME)]
             start_over = choice in ("Start", "Start over")
             resume_time = 0 if start_over else book.current_time
@@ -616,6 +763,15 @@ class ApplianceMenu:
         if self.screen == Screen.LIBRARY:
             if not self.books:
                 return TwoLineFrame("No books", "Check connection")
+            entry = self.current_entry
+            if entry is not None and entry.series:
+                return HomeFrame(
+                    entry.series,
+                    self.books[entry.book_indexes[0]].author,
+                    section_letter=self.section_letter,
+                    section_letter_fill=self.section_letter_fill,
+                    series_count=len(entry.book_indexes),
+                )
             book = self.books[self.book_index]
             return HomeFrame(
                 book.display_title,
@@ -624,6 +780,24 @@ class ApplianceMenu:
                 section_letter=self.section_letter,
                 section_letter_fill=self.section_letter_fill,
                 is_podcast=book_is_podcast(book),
+            )
+
+        if self.screen == Screen.SERIES:
+            if self.series_index == 0 or not self.series_books:
+                return HomeFrame("Back", "", is_back=True, series_position=self.open_series)
+            book = self.books[self.book_index]
+            return HomeFrame(
+                series_member_title(book, self.open_series),
+                book.author,
+                series_position=book.series_position,
+                is_podcast=book_is_podcast(book),
+            )
+
+        if self.screen == Screen.PROFILE:
+            options = self.profile_options
+            index = min(self.profile_index, len(options) - 1)
+            return ProfileMenuFrame(
+                options[index], index, len(options), active=options[index] == self.active_profile and index > 0
             )
 
         if self.screen == Screen.STARTUP_RESUME and self.startup_resume_state is not None:
@@ -673,10 +847,22 @@ class ApplianceMenu:
         if self.screen == Screen.LIBRARY:
             if not self.books:
                 return None
+            entry = self.current_entry
+            if entry is not None and entry.series:
+                return SpokenSelection(f"Series {entry.series}", delay_seconds=BOOK_TITLE_SPEECH_DELAY_SECONDS)
             return SpokenSelection(
                 self.books[self.book_index].display_title,
                 delay_seconds=BOOK_TITLE_SPEECH_DELAY_SECONDS,
             )
+        if self.screen == Screen.SERIES:
+            if self.series_index == 0:
+                return SpokenSelection("Back")
+            return SpokenSelection(
+                series_member_title(self.books[self.book_index], self.open_series),
+                delay_seconds=BOOK_TITLE_SPEECH_DELAY_SECONDS,
+            )
+        if self.screen == Screen.PROFILE:
+            return SpokenSelection(self.profile_options[min(self.profile_index, len(self.profile_options) - 1)])
         if self.screen == Screen.STARTUP_RESUME and self.startup_resume_state is not None:
             return SpokenSelection(("Continue", "Home")[self.startup_resume_index])
         if self.screen == Screen.RESUME_CHOICE:
@@ -738,7 +924,7 @@ class ApplianceMenu:
         elapsed_seconds: float,
         timeout_seconds: float = HOME_RETURN_TIMEOUT_SECONDS,
     ) -> bool:
-        if self.screen != Screen.LIBRARY or self.session is None or not self.is_playing:
+        if self.screen not in (Screen.LIBRARY, Screen.SERIES) or self.session is None or not self.is_playing:
             self.home_return_elapsed = 0.0
             return False
         self.home_return_elapsed += max(0.0, elapsed_seconds)
@@ -821,10 +1007,12 @@ class ApplianceMenu:
             self.clear_section_letter()
             return
         book = self.books[self.book_index]
+        entry = self.current_entry
+        title = entry.series if entry is not None and entry.series else book.display_title
         self.section_letter = (
             author_section_letter(book.author)
             if self.library_sort_mode == LIBRARY_SORT_AUTHOR
-            else title_section_letter(book.display_title)
+            else title_section_letter(title)
         )
         self.section_letter_fill = SECTION_LETTER_MAX_FILL
         self._section_letter_elapsed = 0.0
@@ -906,6 +1094,55 @@ class ApplianceMenu:
     @property
     def default_resume_choice_index(self) -> int:
         return 1 if len(self.resume_options) > 1 else 0
+
+
+@dataclass(frozen=True)
+class LibraryEntry:
+    book_indexes: list[int]
+    series: str = ""                 # empty for a single book
+
+
+def series_sort_key(book: Book) -> tuple[float, str]:
+    try:
+        sequence = float(str(book.series_sequence).replace(",", "."))
+    except ValueError:
+        sequence = float("inf")
+    return (sequence, book.title.casefold())
+
+
+def library_entries(books: list[Book], group_series: bool = True) -> list[LibraryEntry]:
+    """Collapse every series with two or more books into one entry, in library order."""
+    if not group_series:
+        return [LibraryEntry([index]) for index in range(len(books))]
+    members: dict[str, list[int]] = {}
+    for index, book in enumerate(books):
+        name = book.series_name.strip()
+        if name and not book_is_podcast(book):
+            members.setdefault(name.casefold(), []).append(index)
+    entries: list[LibraryEntry] = []
+    emitted: set[str] = set()
+    for index, book in enumerate(books):
+        key = book.series_name.strip().casefold()
+        if key and len(members.get(key, [])) >= 2:
+            if key in emitted:
+                continue
+            emitted.add(key)
+            ordered = sorted(members[key], key=lambda i: series_sort_key(books[i]))
+            entries.append(LibraryEntry(ordered, series=book.series_name.strip()))
+        else:
+            entries.append(LibraryEntry([index]))
+    return entries
+
+
+def series_member_title(book: Book, series: str) -> str:
+    """Inside a series the series name is redundant: show just the episode title."""
+    title = book.title.strip()
+    prefix = series.strip()
+    for separator in (":", " -", " –"):
+        if prefix and title.casefold().startswith((prefix + separator).casefold()):
+            title = title[len(prefix) + len(separator):].strip()
+            break
+    return title or book.display_title
 
 
 def wrap_index(index: int, count: int) -> int:

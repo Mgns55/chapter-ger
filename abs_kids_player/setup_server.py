@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlparse
 from . import i18n
 from . import __version__
 from .audio_cache import AudioCache, cache_dir as audio_cache_dir
+from .listening_log import summarize as summarize_listening
 from .api import AudiobookshelfClient, AudiobookshelfError, client_from_config
 from .bluetooth_audio import connected_bluetooth_audio_device
 from .config import (
@@ -33,8 +34,14 @@ from .config import (
     AppConfig,
     PodcastConfig,
     load_config,
+    profile_by_name,
+    remove_profile,
     save_config,
+    save_profile_from_login,
+    valid_display_type,
     valid_library_sort_mode,
+    valid_port,
+    with_current_login_in_profile,
     valid_playback_speed,
     valid_screen_saver_dim_percent,
     valid_screen_saver_mode,
@@ -665,6 +672,7 @@ PAGE = """<!doctype html>
     </nav>
     <div class="tab-panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" data-tab-panel="overview">
       {status_panel}
+      {listening_card}
     </div>
     <div class="tab-panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" data-tab-panel="settings" hidden>
       {settings_card}
@@ -688,9 +696,14 @@ PAGE = """<!doctype html>
           <label for="password">Password</label>
           <input id="password" name="password" type="password" autocomplete="current-password" required>
 
+          <label for="profile_name">Profile name (optional)</label>
+          <input id="profile_name" name="profile_name" placeholder="e.g. a child's name">
+
           <button type="submit">Log In Player</button>
         </form>
       </section>
+      {profiles_card}
+      {mqtt_card}
     </div>
     <div class="tab-panel" id="panel-system" role="tabpanel" aria-labelledby="tab-system" data-tab-panel="system" hidden>
       {system_card}
@@ -1288,6 +1301,12 @@ class SetupHandler(BaseHTTPRequestHandler):
             "/settings/spoken-navigation": self.handle_spoken_navigation_setting_post,
             "/settings/bluetooth": self.handle_bluetooth_setting_post,
             "/settings/audio-cache/clear": self.handle_audio_cache_clear_post,
+            "/settings/display": self.handle_display_setting_post,
+            "/settings/group-series": self.handle_group_series_setting_post,
+            "/settings/amp-idle": self.handle_amp_idle_setting_post,
+            "/settings/mqtt": self.handle_mqtt_setting_post,
+            "/profiles/activate": self.handle_profile_activate_post,
+            "/profiles/remove": self.handle_profile_remove_post,
             "/settings/library-order": self.handle_library_sort_setting_post,
             "/settings/playback-speed": self.handle_playback_speed_setting_post,
             "/settings/screensaver": self.handle_screen_saver_setting_post,
@@ -1374,9 +1393,14 @@ class SetupHandler(BaseHTTPRequestHandler):
         server_url = one(fields, "server_url")
         username = one(fields, "username")
         password = one(fields, "password")
+        profile_name = one(fields, "profile_name").strip()
 
         try:
+            save_config(with_current_login_in_profile(load_config()))
             saved_config = login_and_refresh_player(server_url, username, password)
+            if profile_name:
+                saved_config = save_profile_from_login(saved_config, profile_name)
+                save_config(saved_config)
         except AudiobookshelfError as error:
             self.send_page(
                 message=f"Login failed: {html.escape(str(error))}",
@@ -1430,6 +1454,68 @@ class SetupHandler(BaseHTTPRequestHandler):
         enabled = one(fields, "enabled") == "1"
         save_bluetooth_setting(enabled)
         apply_bluetooth_radio(enabled)
+        self.redirect_home()
+
+    def handle_display_setting_post(self) -> None:
+        fields = self.post_fields()
+        if fields is None:
+            return
+        display_type = valid_display_type(one(fields, "display_type"))
+        config = load_config()
+        if display_type != config.display_type:
+            save_config(replace(config, display_type=display_type))
+            schedule_service_restart("audiobookshelf-player-oled.service")
+        self.redirect_home()
+
+    def handle_group_series_setting_post(self) -> None:
+        fields = self.post_fields()
+        if fields is None:
+            return
+        save_config(replace(load_config(), group_series=one(fields, "enabled") == "1"))
+        self.redirect_home()
+
+    def handle_amp_idle_setting_post(self) -> None:
+        fields = self.post_fields()
+        if fields is None:
+            return
+        save_config(replace(load_config(), amp_idle_off=one(fields, "enabled") == "1"))
+        self.redirect_home()
+
+    def handle_mqtt_setting_post(self) -> None:
+        fields = self.post_fields()
+        if fields is None:
+            return
+        config = load_config()
+        password = one(fields, "mqtt_password")
+        save_config(
+            replace(
+                config,
+                mqtt_enabled=one(fields, "mqtt_enabled") == "1",
+                mqtt_host=one(fields, "mqtt_host").strip(),
+                mqtt_port=valid_port(one(fields, "mqtt_port")),
+                mqtt_username=one(fields, "mqtt_username").strip(),
+                # an empty password field keeps the saved password
+                mqtt_password=password if password else config.mqtt_password,
+            )
+        )
+        self.send_page(message="Home Assistant settings saved.")
+
+    def handle_profile_activate_post(self) -> None:
+        fields = self.post_fields()
+        if fields is None:
+            return
+        name = one(fields, "name")
+        if profile_by_name(load_config(), name) is None:
+            self.send_page(message="Unknown profile.", is_error=True)
+            return
+        queue_web_player_command("switch_profile", text=name)
+        self.send_page(message=f"Switching to profile {html.escape(name)}.")
+
+    def handle_profile_remove_post(self) -> None:
+        fields = self.post_fields()
+        if fields is None:
+            return
+        save_config(remove_profile(with_current_login_in_profile(load_config()), one(fields, "name")))
         self.redirect_home()
 
     def handle_audio_cache_clear_post(self) -> None:
@@ -1558,6 +1644,9 @@ class SetupHandler(BaseHTTPRequestHandler):
             ),
             settings_card=render_settings_card(config, csrf_token),
             podcasts_card=render_podcasts_card(config, csrf_token),
+            listening_card=render_listening_card(),
+            profiles_card=render_profiles_card(config, csrf_token),
+            mqtt_card=render_mqtt_card(config, csrf_token),
             wifi_card=render_wifi_card(wifi, csrf_token),
             system_card=render_system_card(csrf_token),
             message=message_html,
@@ -2184,6 +2273,43 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         </div>
         <div class="settings-row">
           <div>
+            <div class="setting-name">Group series</div>
+          </div>
+          <form class="toggle-form" method="post" action="/settings/group-series">
+            {csrf_input}
+            <input type="hidden" name="enabled" value="{group_series_next}">
+            <button class="toggle-button{group_series_class}" type="submit" aria-pressed="{group_series_pressed}">
+              <span class="sr-only">{group_series_label}</span>
+            </button>
+          </form>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="setting-name">Amplifier off when idle</div>
+            <div class="setting-state">SD pin of the amplifier on GPIO 17 (pin 11)</div>
+          </div>
+          <form class="toggle-form" method="post" action="/settings/amp-idle">
+            {csrf_input}
+            <input type="hidden" name="enabled" value="{amp_idle_next}">
+            <button class="toggle-button{amp_idle_class}" type="submit" aria-pressed="{amp_idle_pressed}">
+              <span class="sr-only">{amp_idle_label}</span>
+            </button>
+          </form>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="setting-name">Display</div>
+          </div>
+          <form class="select-form" method="post" action="/settings/display">
+            {csrf_input}
+            <select class="settings-select" name="display_type" aria-label="Display">
+              {display_options}
+            </select>
+            <button class="small-button secondary" type="submit">Save</button>
+          </form>
+        </div>
+        <div class="settings-row">
+          <div>
             <div class="setting-name">Offline storage</div>
             <div class="setting-state">{audio_cache_summary}</div>
           </div>
@@ -2275,8 +2401,174 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         sleep_button_label=sleep_button_label,
         sleep_duration_controls=sleep_duration_controls,
         audio_cache_summary=html.escape(audio_cache_summary()),
+        group_series_next="0" if config.group_series else "1",
+        group_series_class=" is-on" if config.group_series else "",
+        group_series_pressed="true" if config.group_series else "false",
+        group_series_label="Disable series grouping" if config.group_series else "Enable series grouping",
+        amp_idle_next="0" if config.amp_idle_off else "1",
+        amp_idle_class=" is-on" if config.amp_idle_off else "",
+        amp_idle_pressed="true" if config.amp_idle_off else "false",
+        amp_idle_label="Keep amplifier on" if config.amp_idle_off else "Switch amplifier off when idle",
+        display_options=render_display_options(config.display_type),
         csrf_input=csrf_input,
     )
+
+
+DISPLAY_LABELS = (
+    ("sh1122", "2.08 inch"),
+    ("ssd1322", "3.12 inch"),
+    ("ssd1322_flipped", "3.12 inch rotated"),
+)
+
+
+def render_display_options(selected: str) -> str:
+    return "\n".join(
+        f'<option value="{value}"{" selected" if value == selected else ""}>{label}</option>'
+        for value, label in DISPLAY_LABELS
+    )
+
+
+def schedule_service_restart(service: str, runner: "SystemCommandRunner | None" = None) -> None:
+    runner = runner or run_system_command
+
+    def worker() -> None:
+        try:
+            runner(["systemctl", "restart", service])
+        except (OSError, subprocess.CalledProcessError) as error:
+            print(f"Restart of {service} failed: {error}", flush=True)
+
+    timer = threading.Timer(1.0, worker)
+    timer.daemon = True
+    timer.start()
+
+
+def format_minutes(seconds: float) -> str:
+    minutes = round(seconds / 60)
+    if minutes < 60:
+        return f"{minutes} min"
+    return f"{minutes // 60} h {minutes % 60:02d} min"
+
+
+def render_listening_card() -> str:
+    try:
+        summaries = summarize_listening()
+    except Exception as error:   # never break the setup page
+        print(f"Listening summary failed: {error}")
+        summaries = []
+    if not summaries:
+        body = '<p class="hint">Nothing listened yet.</p>'
+    else:
+        blocks = []
+        for summary in summaries:
+            name = html.escape(summary.name) if summary.name else "Player"
+            days = "".join(
+                f'<div class="listen-day"><span>{html.escape(day[8:10])}.{html.escape(day[5:7])}.</span>'
+                f'<span class="listen-bar" style="width:{min(100, round(seconds / 36))}%"></span>'
+                f"<span>{format_minutes(seconds)}</span></div>"
+                for day, seconds in summary.daily
+            )
+            books = "".join(
+                f"<li>{html.escape(title)} <span class=\"setting-state\">{format_minutes(seconds)}</span></li>"
+                for title, seconds in summary.top_books
+            ) or "<li>-</li>"
+            evening = (
+                f" · after 8 pm: {format_minutes(summary.today_evening_seconds)}"
+                if summary.today_evening_seconds >= 60
+                else ""
+            )
+            last = f" · last: {html.escape(summary.today_last)}" if summary.today_last else ""
+            blocks.append(
+                f"""
+      <div class="listen-profile">
+        <h3>{name}</h3>
+        <p><strong>Today: {format_minutes(summary.today_seconds)}</strong>{last}{evening}</p>
+        <p class="setting-state">Last 7 days: {format_minutes(summary.week_seconds)}</p>
+        <div class="listen-days">{days}</div>
+        <p class="setting-name">Most played (30 days)</p>
+        <ol class="listen-books">{books}</ol>
+      </div>"""
+            )
+        body = "".join(blocks)
+    return f"""
+    <section class="card" aria-labelledby="listening-heading">
+      <h2 id="listening-heading">Listening</h2>
+      {body}
+    </section>
+    <style>
+      .listen-profile + .listen-profile {{ border-top: 1px solid #dfe6e3; margin-top: 14px; padding-top: 8px; }}
+      .listen-day {{ display: grid; grid-template-columns: 52px 1fr 74px; align-items: center; gap: 8px; font-size: 0.9rem; }}
+      .listen-bar {{ display: block; height: 8px; border-radius: 4px; background: #2f7d6d; min-width: 2px; }}
+      .listen-books {{ margin: 4px 0 0; padding-left: 20px; }}
+    </style>
+    """
+
+
+def render_profiles_card(config: AppConfig, csrf_token: str = "") -> str:
+    csrf_input = render_csrf_input(csrf_token)
+    if not config.profiles:
+        rows = '<p class="hint">No profiles yet. Log in above with a profile name to add one, e.g. one Audiobookshelf user per child.</p>'
+    else:
+        items = []
+        for profile in config.profiles:
+            active = profile.name == config.active_profile
+            name = html.escape(profile.name)
+            user = html.escape(profile.username)
+            action = (
+                '<span class="setting-state">Active</span>'
+                if active
+                else f"""<form method="post" action="/profiles/activate">{csrf_input}
+              <input type="hidden" name="name" value="{name}">
+              <button class="small-button secondary" type="submit">Activate</button></form>"""
+            )
+            items.append(
+                f"""
+        <div class="settings-row">
+          <div>
+            <div class="setting-name">{name}</div>
+            <div class="setting-state">{user}</div>
+          </div>
+          <div class="profile-actions">
+            {action}
+            <form method="post" action="/profiles/remove">{csrf_input}
+              <input type="hidden" name="name" value="{name}">
+              <button class="small-button secondary" type="submit">Remove</button></form>
+          </div>
+        </div>"""
+            )
+        rows = '<div class="settings-list">' + "".join(items) + "</div>"
+    return f"""
+    <section class="card" aria-labelledby="profiles-heading">
+      <h2 id="profiles-heading">Profiles</h2>
+      <p class="hint">With two or more profiles, hold the menu knob for 3 seconds on the player to switch.</p>
+      {rows}
+    </section>
+    <style>.profile-actions {{ display: flex; gap: 8px; align-items: center; }}</style>
+    """
+
+
+def render_mqtt_card(config: AppConfig, csrf_token: str = "") -> str:
+    checked = " checked" if config.mqtt_enabled else ""
+    password_hint = "Saved - leave empty to keep" if config.mqtt_password else ""
+    return f"""
+    <section class="card" aria-labelledby="mqtt-heading">
+      <h2 id="mqtt-heading">Home Assistant (MQTT)</h2>
+      <p class="hint">The player appears in Home Assistant automatically (MQTT discovery): status, title, chapter, battery, listening time, volume and play/pause.</p>
+      <form method="post" action="/settings/mqtt">
+        {render_csrf_input(csrf_token)}
+        <label class="checkbox-label"><input type="checkbox" name="mqtt_enabled" value="1"{checked}> Enable MQTT</label>
+        <label for="mqtt_host">MQTT broker</label>
+        <input id="mqtt_host" name="mqtt_host" value="{html.escape(config.mqtt_host)}" placeholder="homeassistant.local">
+        <label for="mqtt_port">Port</label>
+        <input id="mqtt_port" name="mqtt_port" type="number" min="1" max="65535" value="{config.mqtt_port}">
+        <label for="mqtt_username">Username</label>
+        <input id="mqtt_username" name="mqtt_username" value="{html.escape(config.mqtt_username)}" autocomplete="off">
+        <label for="mqtt_password">Password</label>
+        <input id="mqtt_password" name="mqtt_password" type="password" placeholder="{password_hint}" autocomplete="new-password">
+        <button type="submit">Save Home Assistant Settings</button>
+      </form>
+    </section>
+    <style>.checkbox-label {{ display: flex; gap: 8px; align-items: center; }} .checkbox-label input {{ width: auto; margin: 0; }}</style>
+    """
 
 
 def audio_cache_summary() -> str:

@@ -26,6 +26,11 @@ class WebPlayerStatus:
     volume_percent: int = 50
     muted: bool = False
     updated_at: float = 0
+    chapter: str = ""
+    battery_percent: int = -1          # -1: no battery fitted
+    charging: bool = False
+    profile: str = ""
+    profiles: tuple[str, ...] = ()
 
     @property
     def has_session(self) -> bool:
@@ -38,6 +43,7 @@ class WebPlayerCommand:
     value: int | None = None
     id: str = ""
     created_at: float = 0
+    text: str = ""
 
 
 def save_web_player_status(status: WebPlayerStatus) -> None:
@@ -64,15 +70,21 @@ def load_web_player_status() -> WebPlayerStatus:
         volume_percent=clamp_int(data.get("volume_percent"), 0, 100, 50),
         muted=bool(data.get("muted")),
         updated_at=float(data.get("updated_at") or 0),
+        chapter=str(data.get("chapter", "")),
+        battery_percent=clamp_int(data.get("battery_percent"), -1, 100, -1),
+        charging=bool(data.get("charging")),
+        profile=str(data.get("profile", "")),
+        profiles=tuple(str(p) for p in data.get("profiles", []) if isinstance(p, str)),
     )
 
 
-def queue_web_player_command(action: str, value: int | None = None) -> WebPlayerCommand:
+def queue_web_player_command(action: str, value: int | None = None, text: str = "") -> WebPlayerCommand:
     command = WebPlayerCommand(
         action=action,
         value=value,
         id=uuid.uuid4().hex,
         created_at=time.time(),
+        text=text,
     )
     commands = read_command_data()
     commands.append(asdict(command))
@@ -87,6 +99,7 @@ def consume_web_player_commands() -> list[WebPlayerCommand]:
             value=item.get("value") if isinstance(item.get("value"), int) else None,
             id=str(item.get("id", "")),
             created_at=float(item.get("created_at") or 0),
+            text=str(item.get("text", "")),
         )
         for item in read_command_data()
         if isinstance(item, dict)

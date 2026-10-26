@@ -1,0 +1,19 @@
+[Unit]
+Description=Chapter Player for Audiobookshelf Home Assistant (MQTT) bridge
+After=network-online.target audiobookshelf-player-oled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chapter
+WorkingDirectory=/home/chapter/audiobookshelf-player
+Environment=HOME=/home/chapter
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m abs_kids_player.mqtt_bridge
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/chapter/audiobookshelf-player-mqtt.log
+StandardError=append:/home/chapter/audiobookshelf-player-mqtt.log
+
+[Install]
+WantedBy=multi-user.target

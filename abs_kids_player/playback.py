@@ -54,6 +54,7 @@ class GStreamerPlayback:
         self.audio_output_device = ""
         self.playback_rate = 1.0
         self.audio_cache: Any | None = None
+        self.listening_recorder: Any | None = None   # callable(item_id, title, seconds)
 
     def start(self, session: PlaybackSession, client: AudiobookshelfClient) -> None:
         self.stop()
@@ -390,16 +391,26 @@ class GStreamerPlayback:
                 self.stop()
                 raise PlaybackError("GStreamer playback error.")
 
+    def record_listening(self, seconds: float) -> None:
+        if self.listening_recorder is None or self.session is None or seconds <= 0:
+            return
+        try:
+            self.listening_recorder(self.session.library_item_id, self.session.title, seconds)
+        except Exception as error:
+            print(f"Listening log failed: {error}")
+
     def sync_progress(self) -> None:
         if self.client is None or self.session is None:
             return
+        time_listened = self.time_listened_since_last_sync()
+        self.record_listening(time_listened)
         try:
             self.client.update_progress(
                 self.session.library_item_id,
                 self.current_time,
                 self.session.duration,
                 session_id=self.session.id,
-                time_listened=self.time_listened_since_last_sync(),
+                time_listened=time_listened,
             )
             self.last_sync = time.monotonic()
             self.mirror_progress(self.session.library_item_id, self.current_time, pending=False)
@@ -417,6 +428,8 @@ class GStreamerPlayback:
         duration = self.session.duration
         time_listened = self.time_listened_since_last_sync()
         with self._sync_lock:
+            if not self._sync_in_flight:
+                self.record_listening(time_listened)
             if self._sync_in_flight:
                 return
             self._sync_in_flight = True

@@ -8,6 +8,7 @@ Before=basic.target
 Type=oneshot
 WorkingDirectory=/home/chapter/audiobookshelf-player
 Environment=PYTHONUNBUFFERED=1
+Environment=ABS_KIDS_PLAYER_CONFIG_DIR=/home/chapter/.config/abs-kids-player
 ExecStart=/usr/bin/python3 -m abs_kids_player.boot_splash --hold-seconds 0.1
 RemainAfterExit=yes
 StandardOutput=journal

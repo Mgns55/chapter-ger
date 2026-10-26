@@ -89,6 +89,17 @@ class AudioCache:
         self._jobs: queue.SimpleQueue[tuple[str, Any]] = queue.SimpleQueue()
         self._worker: threading.Thread | None = None
         self.active_item_id = ""
+        self.user = ""          # Audiobookshelf user (profile) whose position is tracked
+
+    @property
+    def user_key(self) -> str:
+        return self.user or "-"
+
+    def _progress_of(self, manifest: dict[str, Any]) -> dict[str, Any] | None:
+        by_user = manifest.get("progress_by_user")
+        if isinstance(by_user, dict):
+            return by_user.get(self.user_key)
+        return None
 
     # ------------------------------------------------------------ manifest
     def item_dir(self, item_id: str) -> Path:
@@ -138,8 +149,11 @@ class AudioCache:
                 "chapters": [asdict(c) for c in session.chapters],
                 "tracks": tracks,
                 "last_used": self.clock(),
-                "progress": old.get("progress") or {"current_time": session.current_time, "updated": 0, "pending": False},
+                "progress_by_user": old.get("progress_by_user") or {},
             }
+            manifest["progress_by_user"].setdefault(
+                self.user_key, {"current_time": session.current_time, "updated": 0, "pending": False}
+            )
             self.save_manifest(session.library_item_id, manifest)
         return True
 
@@ -176,19 +190,21 @@ class AudioCache:
             manifest = self.load_manifest(item_id)
             if manifest is None:
                 return
-            manifest["progress"] = {"current_time": float(current_time), "updated": self.clock(), "pending": pending}
+            manifest.setdefault("progress_by_user", {})[self.user_key] = {
+                "current_time": float(current_time), "updated": self.clock(), "pending": pending,
+            }
             manifest["last_used"] = self.clock()
             self.save_manifest(item_id, manifest)
 
     def local_progress(self, item_id: str) -> dict[str, Any] | None:
         manifest = self.load_manifest(item_id)
-        return manifest.get("progress") if manifest else None
+        return self._progress_of(manifest) if manifest else None
 
     def pending_progress(self) -> list[tuple[str, float, float]]:
         result = []
         for item_id in self.cached_item_ids():
             manifest = self.load_manifest(item_id) or {}
-            progress = manifest.get("progress") or {}
+            progress = self._progress_of(manifest) or {}
             if progress.get("pending"):
                 result.append((item_id, float(progress.get("current_time") or 0), float(manifest.get("duration") or 0)))
         return result
@@ -202,8 +218,9 @@ class AudioCache:
                 return
             with self._lock:
                 manifest = self.load_manifest(item_id)
-                if manifest and manifest.get("progress", {}).get("current_time") == current_time:
-                    manifest["progress"]["pending"] = False
+                progress = self._progress_of(manifest) if manifest else None
+                if progress and progress.get("current_time") == current_time:
+                    progress["pending"] = False
                     self.save_manifest(item_id, manifest)
 
     # ------------------------------------------------------------ offline session
@@ -223,7 +240,7 @@ class AudioCache:
             for t in manifest["tracks"]
         ]
         chapters = [Chapter(**c) for c in manifest.get("chapters", [])]
-        progress = manifest.get("progress") or {}
+        progress = self._progress_of(manifest) or {}
         current_time = 0.0 if start_over else float(progress.get("current_time") or 0)
         duration = float(manifest.get("duration") or 0)
         if duration and current_time >= duration - 5:

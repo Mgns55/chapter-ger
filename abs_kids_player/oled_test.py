@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 import time
 
-from .appliance_io import Sh1122Display
+from .appliance_io import create_display
+from .config import load_config
 from .rotary_ui import TwoLineFrame, WifiSetupFrame
 from .wifi import SETUP_HOTSPOT_SSID, SETUP_HOTSPOT_URL
 
@@ -24,7 +25,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    display = Sh1122Display(
+    display = create_display(
+        load_config().display_type,
         spi_bus=args.spi_bus,
         spi_device=args.spi_device,
         dc_pin=args.dc_pin,

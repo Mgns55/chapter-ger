@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_URL="${CHAPTER_REPO_URL:-https://github.com/Mgns55/chapter-ger.git}"
-RELEASE_REF="${CHAPTER_RELEASE_REF:-v0.3.17}"
+RELEASE_REF="${CHAPTER_RELEASE_REF:-v0.3.18}"
 INSTALL_USER="${CHAPTER_INSTALL_USER:-chapter}"
 INSTALL_DIR="${CHAPTER_INSTALL_DIR:-}"
 ASSUME_YES=0
@@ -34,6 +34,8 @@ APT_PACKAGES=(
   dnsmasq-base
   bluez
   bluez-alsa-utils
+  i2c-tools
+  python3-paho-mqtt
 )
 
 SERVICES=(
@@ -42,6 +44,7 @@ SERVICES=(
   audiobookshelf-player-setup.service
   audiobookshelf-player-port80-forward.service
   audiobookshelf-player-bluetooth-unblock.service
+  audiobookshelf-player-mqtt.service
 )
 
 usage() {
@@ -271,7 +274,14 @@ configure_spi_and_i2s() {
     sudo_run raspi-config nonint do_spi 0 || warn "raspi-config could not enable SPI; adding dtparam=spi=on directly."
   fi
 
+  if command -v raspi-config >/dev/null 2>&1; then
+    sudo_run raspi-config nonint do_i2c 0 || warn "raspi-config could not enable I2C; adding dtparam=i2c_arm=on directly."
+  fi
+
   sudo_run sed -i 's/^[[:space:]]*dtparam=audio=on/#dtparam=audio=on/' "$config_path"
+  # HDMI audio would otherwise become sound card 0 and the amplifier card 1.
+  sudo_run sed -i -E 's/^([[:space:]]*dtoverlay=vc4-kms-v3d)[[:space:]]*$/\1,noaudio/' "$config_path"
+  ensure_boot_config_line "$config_path" "dtparam=i2c_arm=on" '^[[:space:]]*dtparam=i2c_arm=on([[:space:]]|$)'
   ensure_boot_config_line "$config_path" "dtparam=spi=on" '^[[:space:]]*dtparam=spi=on([[:space:]]|$)'
   ensure_boot_config_line "$config_path" "dtoverlay=max98357a" '^[[:space:]]*dtoverlay=max98357a([[:space:],]|$)'
   ensure_boot_config_line "$config_path" "dtoverlay=i2s-mmap" '^[[:space:]]*dtoverlay=i2s-mmap([[:space:],]|$)'
@@ -329,12 +339,15 @@ install_services() {
   render_unit "${deploy_dir}/audiobookshelf-player-setup-system.service" "${tmpdir}/audiobookshelf-player-setup.service" "$home_dir"
   render_unit "${deploy_dir}/audiobookshelf-player-bluetooth-unblock.service" "${tmpdir}/audiobookshelf-player-bluetooth-unblock.service" "$home_dir"
   render_unit "${deploy_dir}/audiobookshelf-player-update.service" "${tmpdir}/audiobookshelf-player-update.service" "$home_dir"
+  render_unit "${deploy_dir}/audiobookshelf-player-mqtt.service" "${tmpdir}/audiobookshelf-player-mqtt.service" "$home_dir"
 
   sudo_run install -m 0644 "${tmpdir}/audiobookshelf-player-boot-splash.service" /etc/systemd/system/
   sudo_run install -m 0644 "${tmpdir}/audiobookshelf-player-oled.service" /etc/systemd/system/
   sudo_run install -m 0644 "${tmpdir}/audiobookshelf-player-setup.service" /etc/systemd/system/audiobookshelf-player-setup.service
   sudo_run install -m 0644 "${tmpdir}/audiobookshelf-player-bluetooth-unblock.service" /etc/systemd/system/
   sudo_run install -m 0644 "${tmpdir}/audiobookshelf-player-update.service" /etc/systemd/system/
+  sudo_run install -m 0644 "${tmpdir}/audiobookshelf-player-mqtt.service" /etc/systemd/system/
+  install_power_sudoers
   sudo_run install -m 0755 "${deploy_dir}/audiobookshelf-player-port80-proxy" /usr/local/sbin/audiobookshelf-player-port80-proxy
   sudo_run install -m 0644 "${deploy_dir}/audiobookshelf-player-port80-forward.service" /etc/systemd/system/
 
@@ -346,6 +359,20 @@ install_services() {
   sudo_run systemctl enable "${SERVICES[@]}"
   sudo_run systemctl enable --now bluealsa.service
   rm -rf "$tmpdir"
+}
+
+install_power_sudoers() {
+  # Lets the player shut the Pi down cleanly when the battery is empty.
+  local tmp
+  tmp="$(mktemp)"
+  printf '%s ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff\n' "$INSTALL_USER" >"$tmp"
+  if command -v visudo >/dev/null 2>&1 && ! visudo -cf "$tmp" >/dev/null 2>&1; then
+    warn "Could not validate the power-off sudoers rule; skipping it."
+    rm -f "$tmp"
+    return
+  fi
+  sudo_run install -m 0440 "$tmp" /etc/sudoers.d/chapter-power
+  rm -f "$tmp"
 }
 
 sed_replacement() {

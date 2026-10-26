@@ -25,6 +25,12 @@ DEFAULT_SCREEN_SAVER_DIM_PERCENT = 15
 DEFAULT_SLEEP_TIMER_MINUTES = 30
 MIN_SLEEP_TIMER_MINUTES = 1
 MAX_SLEEP_TIMER_MINUTES = 240
+DISPLAY_SH1122 = "sh1122"                 # original 2.08" OLED
+DISPLAY_SSD1322 = "ssd1322"               # 3.12" OLED (Chapter Pro)
+DISPLAY_SSD1322_FLIPPED = "ssd1322_flipped"
+DISPLAY_TYPES = (DISPLAY_SH1122, DISPLAY_SSD1322, DISPLAY_SSD1322_FLIPPED)
+AMP_SHUTDOWN_GPIO = 17                    # physical pin 11 -> SD pin of the MAX98357A
+DEFAULT_MQTT_PORT = 1883
 _CONFIG_LOCK = threading.RLock()
 
 
@@ -39,6 +45,17 @@ class PodcastConfig:
 
 def default_podcasts() -> list[PodcastConfig]:
     return []
+
+
+@dataclass(frozen=True)
+class ProfileConfig:
+    """A saved Audiobookshelf login, e.g. one per child."""
+
+    name: str
+    username: str = ""
+    token: str = ""
+    refresh_token: str = ""
+    library_id: str = ""
 
 
 @dataclass
@@ -58,6 +75,16 @@ class AppConfig:
     sleep_timer_minutes: int = DEFAULT_SLEEP_TIMER_MINUTES
     bluetooth_enabled: bool = True
     podcasts: list[PodcastConfig] = field(default_factory=default_podcasts)
+    display_type: str = DISPLAY_SH1122
+    group_series: bool = True
+    amp_idle_off: bool = False
+    profiles: list[ProfileConfig] = field(default_factory=list)
+    active_profile: str = ""
+    mqtt_enabled: bool = False
+    mqtt_host: str = ""
+    mqtt_port: int = DEFAULT_MQTT_PORT
+    mqtt_username: str = ""
+    mqtt_password: str = ""
 
     @property
     def is_ready(self) -> bool:
@@ -91,6 +118,16 @@ def load_config() -> AppConfig:
         sleep_timer_minutes=valid_sleep_timer_minutes(data.get("sleep_timer_minutes")),
         bluetooth_enabled=bool(data.get("bluetooth_enabled", True)),
         podcasts=podcast_configs_from_json(data["podcasts"]) if "podcasts" in data else default_podcasts(),
+        display_type=valid_display_type(str(data.get("display_type", ""))),
+        group_series=bool(data.get("group_series", True)),
+        amp_idle_off=bool(data.get("amp_idle_off", False)),
+        profiles=profile_configs_from_json(data.get("profiles")),
+        active_profile=str(data.get("active_profile", "")),
+        mqtt_enabled=bool(data.get("mqtt_enabled", False)),
+        mqtt_host=str(data.get("mqtt_host", "")).strip(),
+        mqtt_port=valid_port(data.get("mqtt_port")),
+        mqtt_username=str(data.get("mqtt_username", "")),
+        mqtt_password=str(data.get("mqtt_password", "")),
     )
 
 
@@ -209,3 +246,95 @@ def podcast_configs_from_json(value: object) -> list[PodcastConfig]:
         if podcast.url or podcast.feed_url:
             podcasts.append(podcast)
     return podcasts
+
+
+def valid_display_type(value: str) -> str:
+    return value if value in DISPLAY_TYPES else DISPLAY_SH1122
+
+
+def valid_port(value: object) -> int:
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_MQTT_PORT
+    return port if 0 < port < 65536 else DEFAULT_MQTT_PORT
+
+
+def profile_configs_from_json(value: object) -> list[ProfileConfig]:
+    if not isinstance(value, list):
+        return []
+    profiles: list[ProfileConfig] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        if not name or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        profiles.append(
+            ProfileConfig(
+                name=name,
+                username=str(item.get("username", "")),
+                token=str(item.get("token", "")),
+                refresh_token=str(item.get("refresh_token", "")),
+                library_id=str(item.get("library_id", "")),
+            )
+        )
+    return profiles
+
+
+def profile_by_name(config: AppConfig, name: str) -> ProfileConfig | None:
+    wanted = name.strip().casefold()
+    return next((p for p in config.profiles if p.name.casefold() == wanted), None)
+
+
+def with_current_login_in_profile(config: AppConfig) -> AppConfig:
+    """Copy the active login (tokens may have been refreshed) back into its profile entry."""
+    active = profile_by_name(config, config.active_profile)
+    if active is None or not config.token:
+        return config
+    updated = replace(
+        active,
+        username=config.username,
+        token=config.token,
+        refresh_token=config.refresh_token,
+        library_id=config.library_id,
+    )
+    return replace(config, profiles=[updated if p is active else p for p in config.profiles])
+
+
+def save_profile_from_login(config: AppConfig, name: str) -> AppConfig:
+    """Store the login that is currently in `config` as profile `name` and make it active."""
+    name = name.strip() or config.username.strip() or "Profil"
+    profile = ProfileConfig(
+        name=name,
+        username=config.username,
+        token=config.token,
+        refresh_token=config.refresh_token,
+        library_id=config.library_id,
+    )
+    others = [p for p in config.profiles if p.name.casefold() != name.casefold()]
+    return replace(config, profiles=[*others, profile], active_profile=name)
+
+
+def activate_profile(config: AppConfig, name: str) -> AppConfig:
+    """Switch the player login to profile `name`; raises KeyError if it does not exist."""
+    config = with_current_login_in_profile(config)
+    target = profile_by_name(config, name)
+    if target is None:
+        raise KeyError(name)
+    return replace(
+        config,
+        username=target.username,
+        token=target.token,
+        refresh_token=target.refresh_token,
+        library_id=target.library_id,
+        active_profile=target.name,
+    )
+
+
+def remove_profile(config: AppConfig, name: str) -> AppConfig:
+    remaining = [p for p in config.profiles if p.name.casefold() != name.strip().casefold()]
+    active = config.active_profile if profile_by_name(config, config.active_profile) in remaining else ""
+    return replace(config, profiles=remaining, active_profile=active)

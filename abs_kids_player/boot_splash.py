@@ -1,9 +1,29 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import time
 import zlib
 from pathlib import Path
+
+# The boot splash runs as root before the player service: read the configured
+# panel type straight from the player's config file.
+DEFAULT_CONFIG_PATH = Path("/home/chapter/.config/abs-kids-player/config.json")
+
+
+def configured_display_type() -> str:
+    configured_dir = os.environ.get("ABS_KIDS_PLAYER_CONFIG_DIR", "").strip()
+    path = Path(configured_dir) / "config.json" if configured_dir else DEFAULT_CONFIG_PATH
+    try:
+        return str(json.loads(path.read_text(encoding="utf-8")).get("display_type", "sh1122"))
+    except (OSError, ValueError, AttributeError):
+        return "sh1122"
+
+
+def rotate_packed_180(packed: bytes) -> bytes:
+    """Rotate a 4-bit packed 256 x 64 frame by 180 degrees."""
+    return bytes(((value & 0x0F) << 4) | (value >> 4) for value in reversed(packed))
 
 
 CHAPTER_SPLASH_PACKED = zlib.decompress(
@@ -26,10 +46,12 @@ class BootSplashDisplay:
         dc_pin: int = 24,
         reset_pin: int = 25,
         max_speed_hz: int = 4_000_000,
+        display_type: str = "sh1122",
     ) -> None:
         import lgpio
         import spidev
 
+        self.display_type = display_type
         self._lgpio = lgpio
         self._gpio_handle: int | None = None
         self.spi = spidev.SpiDev()
@@ -62,7 +84,19 @@ class BootSplashDisplay:
         self.write_gpio(self.reset_pin, 1)
         time.sleep(0.01)
 
+    @property
+    def is_ssd1322(self) -> bool:
+        return self.display_type.startswith("ssd1322")
+
     def init_display(self) -> None:
+        if self.is_ssd1322:
+            from .ssd1322_sequence import SSD1322_INIT_SEQUENCE
+
+            for command, *params in SSD1322_INIT_SEQUENCE:
+                self.command([command])
+                if params:
+                    self.data(bytes(params))
+            return
         self.command(
             [
                 0xAE,
@@ -93,6 +127,16 @@ class BootSplashDisplay:
             self.spi.xfer2(list(values[index : index + 4096]))
 
     def show(self, _frame: SplashFrame) -> None:
+        if self.is_ssd1322:
+            packed = CHAPTER_SPLASH_PACKED
+            if self.display_type == "ssd1322_flipped":
+                packed = rotate_packed_180(packed)
+            for command, *params in ((0x15, 0x1C, 0x5B), (0x75, 0x00, 0x3F), (0x5C,)):
+                self.command([command])
+                if params:
+                    self.data(bytes(params))
+            self.data(packed)
+            return
         self.command([0x00, 0x10, 0xB0])
         self.data(CHAPTER_SPLASH_PACKED)
 
@@ -160,6 +204,7 @@ def open_display(
                 dc_pin=dc_pin,
                 reset_pin=reset_pin,
                 max_speed_hz=speed,
+                display_type=configured_display_type(),
             )
         except Exception:
             if time.monotonic() >= deadline:

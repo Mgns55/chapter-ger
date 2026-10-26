@@ -15,7 +15,17 @@ from typing import Callable
 
 from .api import AudiobookshelfClient, AudiobookshelfError, client_from_config
 from .audio_cache import AudioCache, OfflineProgressClient, shared_cache
-from .appliance_io import AmpShutdownPin, InputEvent, Ky040Pins, NavigationRotaryInput, Sh1122Display, VolumeRotaryInput
+from .appliance_io import (
+    AmpShutdownPin,
+    InputEvent,
+    Ky040Pins,
+    NavigationRotaryInput,
+    Sh1122Display,
+    VolumeRotaryInput,
+    create_display,
+)
+from .battery import BatteryMonitor
+from .listening_log import record_listening
 from .audio import (
     DEFAULT_MIXER_CONTROLS,
     AudioError,
@@ -43,13 +53,21 @@ from .config import (
     SCREEN_SAVER_BOOKS,
     SCREEN_SAVER_CHAPTER,
     SCREEN_SAVER_CLOCK,
+    AMP_SHUTDOWN_GPIO,
     AppConfig,
+    activate_profile,
     load_config,
+    save_config,
 )
 from .library_cache import load_cached_books, save_cached_books
 from .models import Book
 from .network import get_lan_ip
-from .player_control import WebPlayerStatus, consume_web_player_commands, save_web_player_status
+from .player_control import (
+    WebPlayerStatus,
+    consume_web_player_commands,
+    queue_web_player_command,
+    save_web_player_status,
+)
 from .player_state import clear_last_playback, load_player_state, save_last_playback
 from .podcast import (
     PodcastError,
@@ -102,6 +120,8 @@ DEFAULT_ACTIVE_BRIGHTNESS_PERCENT = 100
 DEFAULT_RUNTIME_CONFIG_REFRESH_SECONDS = 1.0
 DEFAULT_SOFTWARE_UPDATE_REFRESH_SECONDS = 0.2
 DEFAULT_WAKE_INPUT_QUIET_SECONDS = 0.35
+AMP_IDLE_OFF_SECONDS = 8.0          # amplifier off this long after the last sound
+BATTERY_SHUTDOWN_DELAY_SECONDS = 4.0
 VOLUME_STEP_PERCENT = 5
 SPOKEN_VOLUME_INTERVAL_PERCENT = 10
 SPOKEN_NAVIGATION_MIN_VOLUME_PERCENT = 10
@@ -281,6 +301,49 @@ def splash_frame() -> SplashFrame:
 
 
 CONNECTING_WIFI_FRAME = TwoLineFrame("Connecting to Wi-Fi", "Please wait")
+BATTERY_LOW_FRAME = TwoLineFrame("Battery low", "Please charge")
+BATTERY_EMPTY_FRAME = TwoLineFrame("Battery empty", "Switching off")
+PROFILE_SWITCH_FRAME = TwoLineFrame("Switching profile", "Please wait")
+
+# Extra fields for the web/MQTT status that the playback object does not know.
+STATUS_EXTRAS: dict = {"battery_percent": -1, "charging": False, "profile": "", "profiles": ()}
+
+
+def current_chapter_title(playback) -> str:
+    session = getattr(playback, "session", None)
+    if session is None or not getattr(session, "chapters", None):
+        return ""
+    for chapter in session.chapters:
+        if chapter.start <= playback.current_time < chapter.end:
+            return chapter.title
+    return session.chapters[-1].title
+
+
+def request_poweroff() -> None:
+    """Shut the Pi down (allowed for the service user by /etc/sudoers.d/chapter-power)."""
+    import subprocess
+
+    print("Battery empty: shutting down")
+    try:
+        subprocess.run(["sudo", "-n", "/usr/bin/systemctl", "poweroff"], check=False, timeout=20)
+    except (OSError, subprocess.SubprocessError) as error:
+        print(f"Shutdown failed: {error}")
+
+
+def profile_names(config: AppConfig) -> list[str]:
+    return [profile.name for profile in config.profiles]
+
+
+def switch_player_profile(name: str) -> bool:
+    try:
+        config = activate_profile(load_config(), name)
+    except KeyError:
+        print(f"Unknown profile: {name}")
+        return False
+    save_config(config)
+    print(f"Switched to profile {name}")
+    return True
+
 
 
 def setup_frame() -> WifiSetupFrame:
@@ -617,6 +680,10 @@ def effective_muted(percent: int, muted: bool) -> bool:
     return muted or percent <= 0
 
 
+def speech_active(feedback) -> bool:
+    return getattr(feedback, "pending", None) is not None or getattr(feedback, "audio_process", None) is not None
+
+
 def set_amp_shutdown(amp_shutdown, muted: bool, volume_percent: int) -> bool:
     shutdown = effective_muted(volume_percent, muted)
     if amp_shutdown is not None:
@@ -720,8 +787,14 @@ def web_status_for_playback(
     volume_percent: int,
     muted: bool,
 ) -> WebPlayerStatus:
+    extras = dict(
+        battery_percent=STATUS_EXTRAS["battery_percent"],
+        charging=STATUS_EXTRAS["charging"],
+        profile=STATUS_EXTRAS["profile"],
+        profiles=tuple(STATUS_EXTRAS["profiles"]),
+    )
     if playback.session is None:
-        return WebPlayerStatus(volume_percent=volume_percent, muted=muted or volume_percent <= 0)
+        return WebPlayerStatus(volume_percent=volume_percent, muted=muted or volume_percent <= 0, **extras)
     return WebPlayerStatus(
         title=playback.session.title,
         author=playback.session.author,
@@ -730,6 +803,8 @@ def web_status_for_playback(
         is_playing=playback.is_playing,
         volume_percent=volume_percent,
         muted=muted or volume_percent <= 0,
+        chapter=current_chapter_title(playback),
+        **extras,
     )
 
 
@@ -789,6 +864,10 @@ def handle_web_player_commands(
     changed = False
     refresh_library = False
     for command in consume_web_player_commands():
+        if command.action == "switch_profile":
+            if not switch_player_profile(command.text):
+                continue
+            command = replace(command, action="refresh_library")
         if command.action == "refresh_library":
             if playback.is_playing:
                 playback.pause(sync=True)
@@ -868,7 +947,15 @@ def run_oled_service(
     signal.signal(signal.SIGINT, shutdown.request)
     playback = GStreamerPlayback()
     playback.audio_cache = shared_cache()
+    playback.listening_recorder = lambda item_id, title, seconds: record_listening(
+        item_id, title, seconds, profile=STATUS_EXTRAS["profile"]
+    )
     spoken_navigation = SpokenNavigationFeedback(playback.set_spoken_navigation_ducked)
+    announcer = SpokenNavigationFeedback(playback.set_spoken_navigation_ducked)
+    battery_monitor = BatteryMonitor()
+    battery_shutdown_at = 0.0
+    amp_pin_failed = False
+    last_sound_at = time.monotonic()
     amp_shutdown: AmpShutdownPin | None = None
     service_started_at = time.monotonic()
 
@@ -921,6 +1008,10 @@ def run_oled_service(
             sorted_books_for_menu(load_cached_books(startup_config), startup_config.library_sort_mode),
             library_sort_mode=startup_config.library_sort_mode,
         )
+        menu.set_group_series(startup_config.group_series)
+        menu.set_profiles(profile_names(startup_config), startup_config.active_profile)
+        STATUS_EXTRAS["profile"] = startup_config.active_profile or startup_config.username
+        STATUS_EXTRAS["profiles"] = tuple(profile_names(startup_config))
         menu.set_bluetooth_enabled(False)
         menu.set_bluetooth_connected(False)
         menu.set_startup_resume(load_player_state())
@@ -1007,6 +1098,10 @@ def run_oled_service(
                             print(f"Playback speed update failed: {error}")
                     runtime_config = refreshed_config
                     last_runtime_config_load = now
+                    menu.set_group_series(runtime_config.group_series)
+                    menu.set_profiles(profile_names(runtime_config), runtime_config.active_profile)
+                    STATUS_EXTRAS["profile"] = runtime_config.active_profile or runtime_config.username
+                    STATUS_EXTRAS["profiles"] = tuple(profile_names(runtime_config))
                 woke_screen_saver, wake_input_quiet_until = consume_screen_saver_wake_input(
                     events,
                     screen_saver_visible,
@@ -1173,11 +1268,6 @@ def run_oled_service(
                             "volume update",
                         )
                     last_playback_volume_state = playback_volume_state
-                try:
-                    set_amp_shutdown(amp_shutdown, software_muted, software_volume)
-                except Exception as error:
-                    amp_shutdown = None
-                    print(f"MAX98357 amp shutdown control failed: {error}")
                 input_activity = input_activity_seen(
                     overlay,
                     menu_changed,
@@ -1196,6 +1286,57 @@ def run_oled_service(
                         display_brightness_percent,
                     )
                 menu.tick_section_letter(loop_elapsed)
+
+                # Battery (PiSugar): show the level, warn once, shut down cleanly when empty.
+                battery_event = battery_monitor.update(now)
+                battery_state = battery_monitor.display_state
+                try:
+                    display.battery = battery_state
+                except AttributeError:
+                    pass
+                STATUS_EXTRAS["battery_percent"] = battery_state[0] if battery_state else -1
+                STATUS_EXTRAS["charging"] = bool(battery_state and battery_state[1])
+                if battery_event == "warn":
+                    overlay = BATTERY_LOW_FRAME
+                    announcer.request("Battery low. Please charge.", volume_percent=max(software_volume, 30))
+                elif battery_event == "shutdown" and not battery_shutdown_at:
+                    pause_and_publish_playback(playback, menu, software_volume, software_muted)
+                    save_playback_state(playback)
+                    overlay = BATTERY_EMPTY_FRAME
+                    announcer.request("Battery empty. Switching off.", volume_percent=max(software_volume, 30))
+                    battery_shutdown_at = now + BATTERY_SHUTDOWN_DELAY_SECONDS
+                if battery_shutdown_at and now >= battery_shutdown_at:
+                    display.show(BATTERY_EMPTY_FRAME)
+                    request_poweroff()
+                    battery_shutdown_at = now + 60.0
+
+                # Amplifier: off while muted and - if enabled - while nothing is playing.
+                # That avoids the click when the audio stream starts or stops.
+                if (
+                    input_activity
+                    or playback.is_playing
+                    or playback_loading
+                    or speech_active(spoken_navigation)
+                    or speech_active(announcer)
+                ):
+                    last_sound_at = now
+                if runtime_config.amp_idle_off and amp_shutdown is None and not amp_pin_failed:
+                    try:
+                        amp_shutdown = AmpShutdownPin(AMP_SHUTDOWN_GPIO)
+                        print(f"MAX98357 amp shutdown enabled on GPIO{AMP_SHUTDOWN_GPIO}")
+                    except Exception as error:
+                        amp_pin_failed = True
+                        print(f"MAX98357 amp shutdown could not start: {error}")
+                amp_off = effective_muted(software_volume, software_muted)
+                if runtime_config.amp_idle_off and now - last_sound_at >= AMP_IDLE_OFF_SECONDS:
+                    amp_off = True
+                try:
+                    if amp_shutdown is not None:
+                        amp_shutdown.set_shutdown(amp_off)
+                except Exception as error:
+                    amp_shutdown = None
+                    print(f"MAX98357 amp shutdown control failed: {error}")
+
                 if pause_playback and not resume_playback:
                     paused_for_mute = paused_for_mute or playback.is_playing
                     playback.is_playing = False
@@ -1228,6 +1369,12 @@ def run_oled_service(
                     cached_home_frame = None
                     home_frame_loaded_at = now
                 for command in commands:
+                    if command.type == CommandType.SWITCH_PROFILE:
+                        if command.profile_name and command.profile_name != runtime_config.active_profile:
+                            queue_web_player_command("switch_profile", text=command.profile_name)
+                            overlay = PROFILE_SWITCH_FRAME
+                        menu_changed = True
+                        continue
                     if command.type == CommandType.CONFIRM_STILL_LISTENING:
                         sleep_timer.confirm()
                     command_overlay = handle_menu_command(command, menu, playback, playback_results, bluetooth_results)
@@ -1288,6 +1435,7 @@ def run_oled_service(
                     spoken_navigation.poll(speech_output_device)
                 else:
                     spoken_navigation.cancel()
+                announcer.poll(playback.audio_output_device)
                 if overlay is not None:
                     overlay_frame = overlay
                     overlay_seconds = (
@@ -1379,7 +1527,12 @@ def run_oled_service(
                     continue
                 overlay_frame = None
 
-                if status.connected and status.ssid != SETUP_HOTSPOT_SSID:
+                online = status.connected and status.ssid != SETUP_HOTSPOT_SSID
+                # Without Wi-Fi (e.g. in the car) keep the library usable: stored books play offline.
+                offline_library = (
+                    not online and not startup_waiting and bool(menu.books) and runtime_config.is_ready
+                )
+                if online or offline_library:
                     if playback.session is not None and not playback_loading:
                         playback_error_frame = poll_playback_safely(playback)
                         if playback_error_frame is not None:
@@ -1445,7 +1598,11 @@ def run_oled_service(
                         now,
                     )
                     home_frame = scrolled_home_frame(cached_home_frame, now - home_frame_loaded_at)
-                    frame = frame_for_boot_state(status, home_frame, startup_waiting=startup_waiting, saved_wifi=saved_wifi)
+                    frame = (
+                        home_frame
+                        if offline_library
+                        else frame_for_boot_state(status, home_frame, startup_waiting=startup_waiting, saved_wifi=saved_wifi)
+                    )
                 else:
                     books_error_frame = None
                     book_refresh_started = False
@@ -1565,6 +1722,14 @@ def handle_oled_input_events(
         if event.name == "nav_hold":
             print("Navigation hold received")
             if not bluetooth_available:
+                profiles = getattr(menu, "profiles", [])
+                if isinstance(profiles, list) and len(profiles) >= 2:
+                    if spoken_navigation_cancel is not None:
+                        spoken_navigation_cancel()
+                    previous_selection = menu.spoken_selection()
+                    menu.open_profile_menu()
+                    speak_changed_selection(menu, previous_selection, spoken_navigation_feedback)
+                    menu_changed = True
                 continue
             if spoken_navigation_cancel is not None:
                 spoken_navigation_cancel()
@@ -1925,6 +2090,8 @@ def play_book_command_result(command: MenuCommand, playback: GStreamerPlayback) 
         client = client_from_config(config, AudiobookshelfClient)
         cache = getattr(playback, "audio_cache", None)
         cache = cache if isinstance(cache, AudioCache) else None
+        if cache is not None:
+            cache.user = config.username
         try:
             session = client.start_playback(
                 command.book_id,
@@ -2072,7 +2239,8 @@ def main() -> None:
             settle_seconds=args.boot_splash_handoff_settle_seconds,
         )
 
-    display = Sh1122Display(
+    display = create_display(
+        load_config().display_type,
         spi_bus=args.spi_bus,
         spi_device=args.spi_device,
         dc_pin=args.dc_pin,

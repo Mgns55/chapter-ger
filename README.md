@@ -3,8 +3,19 @@
 > **Deutsche Fassung** von [chrismtopher/chapter](https://github.com/chrismtopher/chapter) mit deutscher Oberfläche, abschaltbarem Bluetooth und Leistungsverbesserungen für den Raspberry Pi Zero. Installation:
 >
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/Mgns55/chapter-ger/v0.3.17/scripts/install-raspberry-pi.sh | bash
+> curl -fsSL https://raw.githubusercontent.com/Mgns55/chapter-ger/v0.3.18/scripts/install-raspberry-pi.sh | bash
 > ```
+>
+> **Zusätzlich in dieser Fassung**
+>
+> - **Serien** erscheinen im Menü als ein Eintrag; erst nach Auswahl kommen die einzelnen Folgen (in Reihenfolge). Abschaltbar unter *Einstellungen → Serien zusammenfassen*.
+> - **Offline-Speicher**: gehörte Bücher liegen danach auf der SD-Karte, starten sofort und laufen auch ohne WLAN.
+> - **Profile** (z. B. ein Audiobookshelf-Benutzer pro Kind): unter *Einrichtung* mit Profilname anmelden; am Player Menü-Knopf 3 Sekunden halten zum Wechseln (wenn Bluetooth aus ist).
+> - **Akku** (PiSugar 3 / 3 Plus, wird automatisch erkannt): Ladestand im Display, Ansage bei 15 %, sauberes Herunterfahren bei 5 %.
+> - **3,12″-Display** (SSD1322, z. B. UN312-5664-7): unter *Einstellungen → Display* wählen; lange Titel stehen dort zweizeilig. Steht das Bild auf dem Kopf: „3,12 Zoll gedreht“.
+> - **Kein Knacken**: Verstärker im Leerlauf abschalten – dazu den SD-Pin des MAX98357A mit GPIO 17 (Pin 11) verbinden und unter *Einstellungen* einschalten.
+> - **Home Assistant** per MQTT (automatische Erkennung): Status, Titel, Kapitel, Akku, Hörzeit, Lautstärke, Abspielen/Pause, Profilwahl.
+> - **Hörzeit-Übersicht** für Eltern auf der Übersichtsseite: heute, letzte 7 Tage, meistgehörte Bücher, Hören nach 20 Uhr.
 
 [![CI](https://github.com/chrismtopher/chapter/actions/workflows/ci.yml/badge.svg)](https://github.com/chrismtopher/chapter/actions/workflows/ci.yml)
 

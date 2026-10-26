@@ -53,6 +53,7 @@ class GStreamerPlayback:
         self.bluetooth_output_enabled = False
         self.audio_output_device = ""
         self.playback_rate = 1.0
+        self.audio_cache: Any | None = None
 
     def start(self, session: PlaybackSession, client: AudiobookshelfClient) -> None:
         self.stop()
@@ -206,20 +207,44 @@ class GStreamerPlayback:
         if self.playbin is None or self.Gst is None:
             return
         track = self.current_track
+        uri = track.url
         if isinstance(self.client, AudiobookshelfClient):
-            try:
-                track.url = self.client.authenticated_media_url(track.url)
-            except AudiobookshelfError as error:
-                raise PlaybackError(str(error)) from error
+            local_uri = self.local_track_uri(track)
+            if local_uri:
+                uri = local_uri
+            else:
+                try:
+                    track.url = self.client.authenticated_media_url(track.url)
+                except AudiobookshelfError as error:
+                    raise PlaybackError(str(error)) from error
+                uri = track.url
         self.playbin.set_state(self.Gst.State.NULL)
         self.configure_audio_sink()
-        self.playbin.set_property("uri", track.url)
+        self.playbin.set_property("uri", uri)
         if apply_audio:
             self.apply_audio_state()
         self.playbin.set_state(self.Gst.State.PAUSED)
         self.wait_for_state_change()
         self.seek_track(max(0, self.current_time - track.start_offset))
         self.wait_for_state_change()
+
+    def local_track_uri(self, track) -> str | None:
+        if self.audio_cache is None or self.session is None:
+            return None
+        try:
+            return self.audio_cache.local_uri(self.session.library_item_id, track)
+        except OSError as error:
+            print(f"Audio cache lookup failed: {error}")
+            return None
+
+    def mirror_progress(self, item_id: str, current_time: float, pending: bool, client: Any = None) -> None:
+        """Keep the position on the SD card too, so offline playback resumes at the right spot."""
+        if self.audio_cache is None or not isinstance(client if client is not None else self.client, AudiobookshelfClient):
+            return
+        try:
+            self.audio_cache.record_progress(item_id, current_time, pending)
+        except OSError as error:
+            print(f"Audio cache progress failed: {error}")
 
     def seek_track(self, seconds: float) -> None:
         if self.playbin is None or self.Gst is None:
@@ -377,8 +402,10 @@ class GStreamerPlayback:
                 time_listened=self.time_listened_since_last_sync(),
             )
             self.last_sync = time.monotonic()
+            self.mirror_progress(self.session.library_item_id, self.current_time, pending=False)
         except AudiobookshelfError as error:
             print(f"Progress sync failed: {error}")
+            self.mirror_progress(self.session.library_item_id, self.current_time, pending=True)
 
     def request_progress_sync(self) -> None:
         if self.client is None or self.session is None:
@@ -404,8 +431,10 @@ class GStreamerPlayback:
                     session_id=session_id,
                     time_listened=time_listened,
                 )
+                self.mirror_progress(item_id, current_time, pending=False, client=client)
             except Exception as error:
                 print(f"Progress sync failed: {error}")
+                self.mirror_progress(item_id, current_time, pending=True, client=client)
             finally:
                 with self._sync_lock:
                     self._sync_in_flight = False

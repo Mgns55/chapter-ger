@@ -3,7 +3,7 @@
 > **Deutsche Fassung** von [chrismtopher/chapter](https://github.com/chrismtopher/chapter) mit deutscher Oberfläche, abschaltbarem Bluetooth und Leistungsverbesserungen für den Raspberry Pi Zero. Installation:
 >
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/Mgns55/chapter-ger/v0.3.16/scripts/install-raspberry-pi.sh | bash
+> curl -fsSL https://raw.githubusercontent.com/Mgns55/chapter-ger/v0.3.17/scripts/install-raspberry-pi.sh | bash
 > ```
 
 [![CI](https://github.com/chrismtopher/chapter/actions/workflows/ci.yml/badge.svg)](https://github.com/chrismtopher/chapter/actions/workflows/ci.yml)

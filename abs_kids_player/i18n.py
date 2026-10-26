@@ -224,6 +224,10 @@ WEB = {
     "Disable spoken navigation": "Sprachnavigation ausschalten",
     "Enable sleep timer": "Einschlaf-Timer einschalten",
     "Enable Bluetooth": "Bluetooth einschalten",
+    "Offline storage": "Offline-Speicher",
+    "Clear": "Leeren",
+    "No books stored yet": "Noch keine Bücher gespeichert",
+    "Not available": "Nicht verfügbar",
     "Disable Bluetooth": "Bluetooth ausschalten",
     "Off": "Aus",
     "Disable sleep timer": "Einschlaf-Timer ausschalten",
@@ -308,6 +312,8 @@ WEB = {
 }
 
 WEB_PATTERNS: list[tuple[re.Pattern, Replacement]] = [
+    (re.compile(r"^1 book stored · (.+)$"), r"1 Buch gespeichert · \1"),
+    (re.compile(r"^(\d+) books stored · (.+)$"), r"\1 Bücher gespeichert · \2"),
     (re.compile(r"^Logged in to (.+) as (.+)$"), r"Angemeldet bei \1 als \2"),
     (re.compile(r"^Logged in to (.+)$"), r"Angemeldet bei \1"),
     (re.compile(r"^Connected to (.+)$"), r"Verbunden mit \1"),

@@ -7,6 +7,7 @@ Before=basic.target
 
 [Service]
 Environment=CHAPTER_LANGUAGE=de
+Environment=CHAPTER_AUDIO_CACHE_DIR=/home/chapter/.cache/chapter/audio
 Type=simple
 User=chapter
 WorkingDirectory=/home/chapter/audiobookshelf-player

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hmac
 import html
+import shutil
 import json
 import secrets
 import subprocess
@@ -16,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import i18n
 from . import __version__
+from .audio_cache import AudioCache, cache_dir as audio_cache_dir
 from .api import AudiobookshelfClient, AudiobookshelfError, client_from_config
 from .bluetooth_audio import connected_bluetooth_audio_device
 from .config import (
@@ -1285,6 +1287,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             "/settings/click": self.handle_click_setting_post,
             "/settings/spoken-navigation": self.handle_spoken_navigation_setting_post,
             "/settings/bluetooth": self.handle_bluetooth_setting_post,
+            "/settings/audio-cache/clear": self.handle_audio_cache_clear_post,
             "/settings/library-order": self.handle_library_sort_setting_post,
             "/settings/playback-speed": self.handle_playback_speed_setting_post,
             "/settings/screensaver": self.handle_screen_saver_setting_post,
@@ -1427,6 +1430,12 @@ class SetupHandler(BaseHTTPRequestHandler):
         enabled = one(fields, "enabled") == "1"
         save_bluetooth_setting(enabled)
         apply_bluetooth_radio(enabled)
+        self.redirect_home()
+
+    def handle_audio_cache_clear_post(self) -> None:
+        if self.post_fields() is None:
+            return
+        clear_audio_cache()
         self.redirect_home()
 
     def handle_spoken_navigation_setting_post(self) -> None:
@@ -2175,6 +2184,16 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         </div>
         <div class="settings-row">
           <div>
+            <div class="setting-name">Offline storage</div>
+            <div class="setting-state">{audio_cache_summary}</div>
+          </div>
+          <form class="toggle-form" method="post" action="/settings/audio-cache/clear">
+            {csrf_input}
+            <button class="small-button secondary" type="submit">Clear</button>
+          </form>
+        </div>
+        <div class="settings-row">
+          <div>
             <div class="setting-name">Library order</div>
           </div>
           <form class="select-form" method="post" action="/settings/library-order">
@@ -2255,8 +2274,26 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         sleep_aria_pressed=sleep_aria_pressed,
         sleep_button_label=sleep_button_label,
         sleep_duration_controls=sleep_duration_controls,
+        audio_cache_summary=html.escape(audio_cache_summary()),
         csrf_input=csrf_input,
     )
+
+
+def audio_cache_summary() -> str:
+    try:
+        cache = AudioCache()
+        books = len(cache.cached_item_ids())
+        used = cache.usage_bytes() / 1024**3
+    except OSError:
+        return "Not available"
+    if books == 0:
+        return "No books stored yet"
+    noun = "book" if books == 1 else "books"
+    return f"{books} {noun} stored · {used:.1f} GB"
+
+
+def clear_audio_cache() -> None:
+    shutil.rmtree(audio_cache_dir(), ignore_errors=True)
 
 
 def render_podcasts_card(config: AppConfig, csrf_token: str = "") -> str:

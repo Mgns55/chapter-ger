@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Callable
 
 from .api import AudiobookshelfClient, AudiobookshelfError, client_from_config
+from .audio_cache import AudioCache, OfflineProgressClient, shared_cache
 from .appliance_io import AmpShutdownPin, InputEvent, Ky040Pins, NavigationRotaryInput, Sh1122Display, VolumeRotaryInput
 from .audio import (
     DEFAULT_MIXER_CONTROLS,
@@ -866,6 +867,7 @@ def run_oled_service(
     signal.signal(signal.SIGTERM, shutdown.request)
     signal.signal(signal.SIGINT, shutdown.request)
     playback = GStreamerPlayback()
+    playback.audio_cache = shared_cache()
     spoken_navigation = SpokenNavigationFeedback(playback.set_spoken_navigation_ducked)
     amp_shutdown: AmpShutdownPin | None = None
     service_started_at = time.monotonic()
@@ -1921,12 +1923,29 @@ def play_book_command_result(command: MenuCommand, playback: GStreamerPlayback) 
         if not config.is_ready:
             return PlaybackCommandResult(error_frame=setup_address_frame())
         client = client_from_config(config, AudiobookshelfClient)
-        session = client.start_playback(
-            command.book_id,
-            start_over=command.start_over,
-            resume_time=command.resume_time,
-        )
+        cache = getattr(playback, "audio_cache", None)
+        cache = cache if isinstance(cache, AudioCache) else None
+        try:
+            session = client.start_playback(
+                command.book_id,
+                start_over=command.start_over,
+                resume_time=command.resume_time,
+            )
+        except AudiobookshelfError as error:
+            offline = cache.offline_session(command.book_id, start_over=command.start_over) if cache else None
+            if offline is None:
+                raise
+            print(f"Audiobookshelf not reachable ({error}); playing the local copy")
+            offline_client = OfflineProgressClient(cache)
+            playback.start(offline, offline_client)
+            return PlaybackCommandResult(session=offline, client=offline_client)
+        if cache is not None and not command.start_over:
+            local = cache.local_progress(command.book_id)
+            if local and local.get("pending"):   # listened offline since the last sync
+                session.current_time = float(local.get("current_time") or session.current_time)
         playback.start(session, client)
+        if cache is not None:
+            cache.start_download(session, client)
         return PlaybackCommandResult(session=session, client=client)
     except (AudiobookshelfError, PlaybackError, PodcastError) as error:
         print(f"Playback failed: {error}")

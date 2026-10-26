@@ -5,6 +5,7 @@ After=network-online.target
 
 [Service]
 Environment=CHAPTER_LANGUAGE=de
+Environment=CHAPTER_AUDIO_CACHE_DIR=/home/chapter/.cache/chapter/audio
 Type=simple
 WorkingDirectory=/home/chapter/audiobookshelf-player
 Environment=ABS_KIDS_PLAYER_CONFIG_DIR=/home/chapter/.config/abs-kids-player

@@ -4,6 +4,13 @@ All notable changes to Chapter Player for Audiobookshelf are documented here.
 
 ## Unreleased
 
+## [0.3.17] - 2026-10-26 (Mgns55/chapter-ger)
+
+- Offline-Speicher: Hörbücher werden beim ersten Abspielen im Hintergrund auf die SD-Karte geladen. Danach startet die Wiedergabe aus der lokalen Datei und funktioniert auch ohne WLAN.
+- Ohne Verbindung zum Server spielt Chapter gespeicherte Bücher ab und merkt sich die Position; sie wird beim nächsten Kontakt mit Audiobookshelf nachgetragen.
+- Älteste Bücher werden automatisch gelöscht (Grenze 40 GB bzw. mindestens 2 GB frei, einstellbar über CHAPTER_AUDIO_CACHE_MAX_GB).
+- Einstellungen: Zeile "Offline-Speicher" mit Belegung und Knopf zum Leeren.
+
 ## [0.3.16] - 2026-10-25 (Mgns55/chapter-ger)
 
 - Setup-Seite: Audiobookshelf-Status wird eine Minute zwischengespeichert statt bei jedem Aufruf abgefragt.

@@ -38,7 +38,7 @@
   - 4 × M3×12 für den Lautsprecherring
   - 4 × Blechschraube 2,5 × 6 mm für das Display (in die vorgebohrten Dome)
 - **2 Klett-Kabelbinder**, bis 12 mm breit, für den Pi/PiSugar-Stapel
-- **USB-C-Einbaubuchse mit kurzem, gewinkeltem Kabel** (Panel-Mount, 20–30 cm): Öffnung 12,5 × 6,5 mm, Langlöcher für 25–32 mm Schraubabstand
+- **USB-C-Einbaubuchse mit gewinkeltem Kabel**: Flansch ca. 25 × 8 mm, Gewindelöcher 17 mm Mittenabstand. Der Flansch sitzt außen in einer 2 mm tiefen Mulde, verschraubt wird von innen.
 - **Moosgummi-Dichtband** (ca. 3 × 2 mm) auf die hintere Kante der Lautsprecherkammer
 - etwas **Dämmwolle** oder Polyesterwatte für die Kammer
 - **4 Gummifüße** Ø 10 mm, für die Mulden im Boden

@@ -84,7 +84,7 @@ PI_SIZE = (65.0, 56.0)
 PI_GUIDE_H, PI_GUIDE_LEG, PI_GUIDE_T = 12.0, 9.0, 2.0
 
 # back panel openings
-USB = (135.0, 105.0)                          # USB-C panel-mount extension (x, z)
+USB = (135.0, 105.0)                          # USB-C panel-mount socket (x, z)
 SEG = 64
 
 
@@ -268,13 +268,13 @@ def build_back_panel() -> mf.Manifold:
             loops.append(loop)
     panel += union(loops)
 
-    # USB-C panel-mount socket: 12.5 x 6.5 opening, M3 slots for 25-32 mm hole spacing
+    # USB-C panel-mount socket (flange 25 x 8 mm, threaded holes 17 mm apart, Ø 3 mm):
+    # flange sits in a 2 mm recess on the outside, socket body through a 10.5 x 5.5 cut-out,
+    # screws from the inside
     ux, uz = USB
-    opening = rrect(ux - 6.25, uz - 3.25, ux + 6.25, uz + 3.25, 1.5)
-    slots = [rrect(ux - 16.0 - 1.7, uz - 1.7, ux - 12.5 + 1.7, uz + 1.7, 1.69),
-             rrect(ux + 12.5 - 1.7, uz - 1.7, ux + 16.0 + 1.7, uz + 1.7, 1.69)]
-    for shape in [opening, *slots]:
-        panel -= prism_y(shape, y_in - 1, y_out + 1)
+    panel -= prism_y(rrect(ux - 12.9, uz - 4.4, ux + 12.9, uz + 4.4, 2.5), y_out - 2.0, y_out + 1)
+    panel -= prism_y(rrect(ux - 5.25, uz - 2.75, ux + 5.25, uz + 2.75, 1.2), y_in - 1, y_out + 1)
+    panel -= union([cyl_y(ux + dx, uz, y_in - 1, y_out + 1, 1.7, 32) for dx in (-8.5, 8.5)])
 
     # ventilation slots above the Pi
     for i in range(6):

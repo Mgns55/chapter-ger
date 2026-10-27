@@ -108,6 +108,12 @@ JACK_CLAMP_RIM_H = 7.0                        # clamp rim reaches from the pad t
 AMP_DOMES = ((63.4, 32.0), (76.6, 32.0))      # (y, z)
 AMP_DOME_R, AMP_DOME_LEN = 3.5, 8.0
 
+# Power button (12 mm flat stainless push button, nut from the inside) on the top, centred
+# between and behind the knobs - clear of the encoder boards, the Pi's audio plug and the
+# headphone socket. Wired in parallel to the PiSugar's power button.
+BUTTON = (167.0, 80.0)                        # (x, y) on the top
+BUTTON_HOLE_R = 6.1                           # 12.2 mm for an M12 thread
+
 NAME_TEXT = "Franz Pro"                       # engraved on the bottom
 NAME_CAP = 5.0
 SEG = 64
@@ -279,6 +285,9 @@ def build_body() -> mf.Manifold:
     for x in (20.0, W - 20.0):
         for y in (15.0, BODY_D - 12.0):
             body -= cyl_z(x, y, -1, 1.0, 5.5)
+
+    # power button on the top
+    body -= cyl_z(BUTTON[0], BUTTON[1], H - WALL - 1, H + 1, BUTTON_HOLE_R, 96)
 
     # amplifier domes on the divider (teardrops pointing -y: the divider prints upright, +y up)
     divider_face = RIGHT_CAV[0]

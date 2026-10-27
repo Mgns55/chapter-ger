@@ -44,7 +44,7 @@
 - **Moosgummi-Dichtband** (ca. 3 × 2 mm) auf die hintere Kante der Lautsprecherkammer
 - etwas **Dämmwolle** oder Polyesterwatte für die Kammer
 - **4 Gummifüße** Ø 10 mm, für die Mulden im Boden
-- **2 × M3×8 mit Mutter** für die Kopfhörerbuchse (Löcher diagonal, Ausschnitt Ø 22,5 mm)
+- **2 × M3×8 mit Mutter** für die Kopfhörerbuchse (Löcher diagonal 25 mm waagerecht / ca. 19 mm senkrecht, Ausschnitt Ø 22,5 mm)
 
 ## Montage
 

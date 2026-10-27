@@ -91,7 +91,9 @@ USB = (135.0, 105.0)                          # USB-C panel-mount socket (x, z)
 JACK = (55.0, 88.0)                           # (y, z) on the right side wall
 JACK_CUTOUT_R = 11.25                         # 22.5 mm hole, the flange covers it
 JACK_TEARDROP_TOP = 12.75                     # flat-topped teardrop: prints without support
-JACK_SCREWS = ((12.0, 9.5), (-12.0, -9.5))    # diagonal M3 holes (D-size pattern 24 x 19 mm), (dy, dz)
+# Socket drawing: flange 31 x 26 mm, front ring 20 mm, holes 3 mm, 25 mm apart horizontally
+# (vertical offset not dimensioned, ~19 mm measured from the drawing). (dy, dz) from the centre.
+JACK_SCREWS = ((12.5, 9.5), (-12.5, -9.5))
 
 NAME_TEXT = "Franz Pro"                       # engraved on the bottom
 NAME_CAP = 5.0

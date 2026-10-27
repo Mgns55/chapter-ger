@@ -38,7 +38,9 @@ from .config import (
     remove_profile,
     save_config,
     save_profile_from_login,
+    HEADPHONE_MAX_PERCENTS,
     valid_display_type,
+    valid_headphone_max_percent,
     valid_library_sort_mode,
     valid_port,
     with_current_login_in_profile,
@@ -1304,6 +1306,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             "/settings/display": self.handle_display_setting_post,
             "/settings/group-series": self.handle_group_series_setting_post,
             "/settings/amp-idle": self.handle_amp_idle_setting_post,
+            "/settings/headphones": self.handle_headphones_setting_post,
             "/settings/mqtt": self.handle_mqtt_setting_post,
             "/profiles/activate": self.handle_profile_activate_post,
             "/profiles/remove": self.handle_profile_remove_post,
@@ -1472,6 +1475,20 @@ class SetupHandler(BaseHTTPRequestHandler):
         if fields is None:
             return
         save_config(replace(load_config(), group_series=one(fields, "enabled") == "1"))
+        self.redirect_home()
+
+    def handle_headphones_setting_post(self) -> None:
+        fields = self.post_fields()
+        if fields is None:
+            return
+        config = load_config()
+        if "max_percent" in fields:
+            config = replace(config, headphone_max_percent=valid_headphone_max_percent(one(fields, "max_percent")))
+        if "enabled" in fields:
+            config = replace(config, headphones_enabled=one(fields, "enabled") == "1")
+        save_config(config)
+        if "output" in fields:
+            queue_web_player_command("set_output", text="headphones" if one(fields, "output") == "headphones" else "speaker")
         self.redirect_home()
 
     def handle_amp_idle_setting_post(self) -> None:
@@ -2298,6 +2315,20 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         </div>
         <div class="settings-row">
           <div>
+            <div class="setting-name">Headphone socket</div>
+            <div class="setting-state">3.5 mm jack of the Raspberry Pi</div>
+          </div>
+          <form class="toggle-form" method="post" action="/settings/headphones">
+            {csrf_input}
+            <input type="hidden" name="enabled" value="{headphones_next}">
+            <button class="toggle-button{headphones_class}" type="submit" aria-pressed="{headphones_pressed}">
+              <span class="sr-only">{headphones_label}</span>
+            </button>
+          </form>
+        </div>
+        {headphone_rows}
+        <div class="settings-row">
+          <div>
             <div class="setting-name">Display</div>
           </div>
           <form class="select-form" method="post" action="/settings/display">
@@ -2410,8 +2441,50 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         amp_idle_pressed="true" if config.amp_idle_off else "false",
         amp_idle_label="Keep amplifier on" if config.amp_idle_off else "Switch amplifier off when idle",
         display_options=render_display_options(config.display_type),
+        headphones_next="0" if config.headphones_enabled else "1",
+        headphones_class=" is-on" if config.headphones_enabled else "",
+        headphones_pressed="true" if config.headphones_enabled else "false",
+        headphones_label="Disable headphone socket" if config.headphones_enabled else "Enable headphone socket",
+        headphone_rows=render_headphone_rows(config, csrf_input),
         csrf_input=csrf_input,
     )
+
+
+def render_headphone_rows(config: AppConfig, csrf_input: str) -> str:
+    if not config.headphones_enabled:
+        return ""
+    output = load_web_player_status().output
+    target = "speaker" if output == "headphones" else "headphones"
+    current = "Headphones" if output == "headphones" else "Speaker"
+    button = "Switch to speaker" if output == "headphones" else "Switch to headphones"
+    options = "\n".join(
+        f'<option value="{value}"{" selected" if value == config.headphone_max_percent else ""}>{value} %</option>'
+        for value in HEADPHONE_MAX_PERCENTS
+    )
+    return f"""
+        <div class="settings-row">
+          <div>
+            <div class="setting-name">Audio output</div>
+            <div class="setting-state">{current}</div>
+          </div>
+          <form class="toggle-form" method="post" action="/settings/headphones">
+            {csrf_input}
+            <input type="hidden" name="output" value="{target}">
+            <button class="small-button secondary" type="submit">{button}</button>
+          </form>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="setting-name">Headphone volume limit</div>
+          </div>
+          <form class="select-form" method="post" action="/settings/headphones">
+            {csrf_input}
+            <select class="settings-select" name="max_percent" aria-label="Headphone volume limit">
+              {options}
+            </select>
+            <button class="small-button secondary" type="submit">Save</button>
+          </form>
+        </div>"""
 
 
 DISPLAY_LABELS = (

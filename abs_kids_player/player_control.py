@@ -31,6 +31,8 @@ class WebPlayerStatus:
     charging: bool = False
     profile: str = ""
     profiles: tuple[str, ...] = ()
+    output: str = "speaker"            # "speaker" or "headphones"
+    headphones_available: bool = False
 
     @property
     def has_session(self) -> bool:
@@ -75,6 +77,8 @@ def load_web_player_status() -> WebPlayerStatus:
         charging=bool(data.get("charging")),
         profile=str(data.get("profile", "")),
         profiles=tuple(str(p) for p in data.get("profiles", []) if isinstance(p, str)),
+        output="headphones" if data.get("output") == "headphones" else "speaker",
+        headphones_available=bool(data.get("headphones_available")),
     )
 
 

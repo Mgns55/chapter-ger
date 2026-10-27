@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_URL="${CHAPTER_REPO_URL:-https://github.com/Mgns55/chapter-ger.git}"
-RELEASE_REF="${CHAPTER_RELEASE_REF:-v0.3.19}"
+RELEASE_REF="${CHAPTER_RELEASE_REF:-v0.3.20}"
 INSTALL_USER="${CHAPTER_INSTALL_USER:-chapter}"
 INSTALL_DIR="${CHAPTER_INSTALL_DIR:-}"
 ASSUME_YES=0
@@ -278,7 +278,10 @@ configure_spi_and_i2s() {
     sudo_run raspi-config nonint do_i2c 0 || warn "raspi-config could not enable I2C; adding dtparam=i2c_arm=on directly."
   fi
 
-  sudo_run sed -i 's/^[[:space:]]*dtparam=audio=on/#dtparam=audio=on/' "$config_path"
+  # The Pi's own 3.5 mm jack stays available for an optional headphone socket;
+  # /etc/asound.conf addresses the cards by name, so their order does not matter.
+  sudo_run sed -i -E 's/^[[:space:]]*#[[:space:]]*dtparam=audio=on/dtparam=audio=on/' "$config_path"
+  ensure_boot_config_line "$config_path" "dtparam=audio=on" '^[[:space:]]*dtparam=audio=on([[:space:]]|$)'
   # HDMI audio would otherwise become sound card 0 and the amplifier card 1.
   sudo_run sed -i -E 's/^([[:space:]]*dtoverlay=vc4-kms-v3d)[[:space:]]*$/\1,noaudio/' "$config_path"
   ensure_boot_config_line "$config_path" "dtparam=i2c_arm=on" '^[[:space:]]*dtparam=i2c_arm=on([[:space:]]|$)'
@@ -294,7 +297,7 @@ install_asound_config() {
   cat >"$tmp" <<'EOF'
 pcm.speakerbonnet {
    type hw
-   card 0
+   card MAX98357A
 }
 
 pcm.!default {
@@ -318,7 +321,27 @@ pcm.dmixer {
 
 ctl.dmixer {
   type hw
-  card 0
+  card MAX98357A
+}
+
+# Optional headphone socket on the Pi's 3.5 mm jack
+pcm.headphones {
+   type plug
+   slave.pcm "hpdmixer"
+}
+
+pcm.hpdmixer {
+   type dmix
+   ipc_key 2048
+   ipc_perm 0666
+   slave {
+     pcm "hw:Headphones"
+     period_time 0
+     period_size 1024
+     buffer_size 8192
+     rate 44100
+     channels 2
+   }
 }
 EOF
   sudo_run install -m 0644 "$tmp" /etc/asound.conf

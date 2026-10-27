@@ -31,6 +31,8 @@ DISPLAY_SSD1322_FLIPPED = "ssd1322_flipped"
 DISPLAY_TYPES = (DISPLAY_SH1122, DISPLAY_SSD1322, DISPLAY_SSD1322_FLIPPED)
 AMP_SHUTDOWN_GPIO = 17                    # physical pin 11 -> SD pin of the MAX98357A
 DEFAULT_MQTT_PORT = 1883
+HEADPHONE_MAX_PERCENTS = (30, 40, 50, 60, 70, 80, 100)
+DEFAULT_HEADPHONE_MAX_PERCENT = 50
 _CONFIG_LOCK = threading.RLock()
 
 
@@ -85,6 +87,8 @@ class AppConfig:
     mqtt_port: int = DEFAULT_MQTT_PORT
     mqtt_username: str = ""
     mqtt_password: str = ""
+    headphones_enabled: bool = False                 # a headphone socket is wired to the Pi's jack
+    headphone_max_percent: int = DEFAULT_HEADPHONE_MAX_PERCENT
 
     @property
     def is_ready(self) -> bool:
@@ -128,6 +132,8 @@ def load_config() -> AppConfig:
         mqtt_port=valid_port(data.get("mqtt_port")),
         mqtt_username=str(data.get("mqtt_username", "")),
         mqtt_password=str(data.get("mqtt_password", "")),
+        headphones_enabled=bool(data.get("headphones_enabled", False)),
+        headphone_max_percent=valid_headphone_max_percent(data.get("headphone_max_percent")),
     )
 
 
@@ -250,6 +256,14 @@ def podcast_configs_from_json(value: object) -> list[PodcastConfig]:
 
 def valid_display_type(value: str) -> str:
     return value if value in DISPLAY_TYPES else DISPLAY_SH1122
+
+
+def valid_headphone_max_percent(value: object) -> int:
+    try:
+        percent = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_HEADPHONE_MAX_PERCENT
+    return percent if percent in HEADPHONE_MAX_PERCENTS else DEFAULT_HEADPHONE_MAX_PERCENT
 
 
 def valid_port(value: object) -> int:

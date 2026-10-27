@@ -11,6 +11,7 @@ from .models import PlaybackSession
 
 
 PROGRESS_SYNC_SECONDS = 15
+HEADPHONES_ALSA_DEVICE = "headphones"      # dmix on the Pi's 3.5 mm jack, see /etc/asound.conf
 VOLUME_FADE_SECONDS = 0.35
 VOLUME_FADE_STEPS = 16
 PREROLL_VOLUME_FLOOR = 0.001
@@ -55,6 +56,8 @@ class GStreamerPlayback:
         self.playback_rate = 1.0
         self.audio_cache: Any | None = None
         self.listening_recorder: Any | None = None   # callable(item_id, title, seconds)
+        self.headphones_output = False
+        self.headphone_volume_scale = 1.0              # hearing protection: max level on headphones
 
     def start(self, session: PlaybackSession, client: AudiobookshelfClient) -> None:
         self.stop()
@@ -316,6 +319,9 @@ class GStreamerPlayback:
             return
 
         if not self.bluetooth_output_enabled:
+            if self.headphones_output:
+                self.select_alsa_sink(HEADPHONES_ALSA_DEVICE, "chapter-headphones-sink")
+                return
             self.select_default_audio_sink()
             return
 
@@ -337,6 +343,36 @@ class GStreamerPlayback:
         except Exception as error:
             self.audio_output_device = ""
             print(f"Bluetooth audio output could not be selected: {error}")
+
+    def select_alsa_sink(self, device: str, name: str) -> None:
+        try:
+            sink = self.Gst.ElementFactory.make("alsasink", name)
+            if sink is None:
+                self.select_default_audio_sink()
+                return
+            sink.set_property("device", device)
+            self.playbin.set_property("audio-sink", sink)
+            self.audio_output_device = device
+            print(f"Audio output selected: {device}")
+        except Exception as error:
+            print(f"Audio output {device} could not be selected: {error}")
+            self.select_default_audio_sink()
+
+    def set_headphones_output(self, enabled: bool, max_percent: int = 100) -> None:
+        """Switch between speaker and headphone socket; applies at once if something is loaded."""
+        changed = enabled != self.headphones_output
+        if enabled and changed:
+            set_headphone_mixer_level()
+        self.headphones_output = enabled
+        self.headphone_volume_scale = min(max(max_percent, 1), 100) / 100 if enabled else 1.0
+        if not enabled and self.audio_output_device == HEADPHONES_ALSA_DEVICE:
+            self.audio_output_device = ""
+        if enabled and not self.bluetooth_output_enabled:
+            self.audio_output_device = HEADPHONES_ALSA_DEVICE
+        if changed:
+            self.refresh_audio_output()
+        else:
+            self.apply_audio_state()
 
     def select_default_audio_sink(self) -> None:
         self.audio_output_device = ""
@@ -490,6 +526,8 @@ class GStreamerPlayback:
         if self.muted or self.soft_paused:
             return SILENCE_VOLUME
         target = (self.volume_percent / 100) * MAX_EFFECTIVE_VOLUME
+        if self.headphones_output:
+            target *= self.headphone_volume_scale
         if self.spoken_navigation_ducked:
             target *= SPOKEN_NAVIGATION_DUCK_FACTOR
         return target
@@ -508,6 +546,17 @@ class GStreamerPlayback:
             self.playbin.set_property("volume", value)
             time.sleep(delay)
         self._effective_volume = target
+
+
+def set_headphone_mixer_level() -> None:
+    """The jack's own mixer may start low; set it to 0 dB once (volume is handled in software)."""
+    import subprocess
+
+    try:
+        subprocess.run(["amixer", "-q", "-c", "Headphones", "sset", "PCM", "0dB", "unmute"],
+                       check=False, timeout=3, capture_output=True)
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 
 def clamp(value: int, minimum: int, maximum: int) -> int:

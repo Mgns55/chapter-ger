@@ -306,7 +306,14 @@ BATTERY_EMPTY_FRAME = TwoLineFrame("Battery empty", "Switching off")
 PROFILE_SWITCH_FRAME = TwoLineFrame("Switching profile", "Please wait")
 
 # Extra fields for the web/MQTT status that the playback object does not know.
-STATUS_EXTRAS: dict = {"battery_percent": -1, "charging": False, "profile": "", "profiles": ()}
+STATUS_EXTRAS: dict = {
+    "battery_percent": -1, "charging": False, "profile": "", "profiles": (),
+    "output": "speaker", "headphones_available": False,
+}
+# "speaker" / "headphones" requested from the setup page or Home Assistant, handled by the main loop
+PENDING_OUTPUT_REQUEST: dict = {"value": ""}
+HEADPHONES_FRAME = TwoLineFrame("Headphones", "Speaker off")
+SPEAKER_FRAME = TwoLineFrame("Speaker", "Headphones off")
 
 
 def current_chapter_title(playback) -> str:
@@ -680,6 +687,15 @@ def effective_muted(percent: int, muted: bool) -> bool:
     return muted or percent <= 0
 
 
+def speech_volume(volume_percent: int, playback) -> int:
+    """Spoken feedback follows the headphone volume limit."""
+    scale = getattr(playback, "headphone_volume_scale", 1.0) if getattr(playback, "headphones_output", False) else 1.0
+    try:
+        return max(1, round(volume_percent * float(scale)))
+    except (TypeError, ValueError):
+        return volume_percent
+
+
 def speech_active(feedback) -> bool:
     return getattr(feedback, "pending", None) is not None or getattr(feedback, "audio_process", None) is not None
 
@@ -792,6 +808,8 @@ def web_status_for_playback(
         charging=STATUS_EXTRAS["charging"],
         profile=STATUS_EXTRAS["profile"],
         profiles=tuple(STATUS_EXTRAS["profiles"]),
+        output=STATUS_EXTRAS["output"],
+        headphones_available=STATUS_EXTRAS["headphones_available"],
     )
     if playback.session is None:
         return WebPlayerStatus(volume_percent=volume_percent, muted=muted or volume_percent <= 0, **extras)
@@ -864,6 +882,11 @@ def handle_web_player_commands(
     changed = False
     refresh_library = False
     for command in consume_web_player_commands():
+        if command.action == "set_output":
+            PENDING_OUTPUT_REQUEST["value"] = command.text
+            changed = True
+            continue
+
         if command.action == "switch_profile":
             if not switch_player_profile(command.text):
                 continue
@@ -956,6 +979,7 @@ def run_oled_service(
     battery_shutdown_at = 0.0
     amp_pin_failed = False
     last_sound_at = time.monotonic()
+    headphones_on = False          # always start on the speaker
     amp_shutdown: AmpShutdownPin | None = None
     service_started_at = time.monotonic()
 
@@ -1012,6 +1036,8 @@ def run_oled_service(
         menu.set_profiles(profile_names(startup_config), startup_config.active_profile)
         STATUS_EXTRAS["profile"] = startup_config.active_profile or startup_config.username
         STATUS_EXTRAS["profiles"] = tuple(profile_names(startup_config))
+        STATUS_EXTRAS["headphones_available"] = startup_config.headphones_enabled
+        menu.set_headphones(startup_config.headphones_enabled, False)
         menu.set_bluetooth_enabled(False)
         menu.set_bluetooth_connected(False)
         menu.set_startup_resume(load_player_state())
@@ -1102,6 +1128,15 @@ def run_oled_service(
                     menu.set_profiles(profile_names(runtime_config), runtime_config.active_profile)
                     STATUS_EXTRAS["profile"] = runtime_config.active_profile or runtime_config.username
                     STATUS_EXTRAS["profiles"] = tuple(profile_names(runtime_config))
+                    if headphones_on and not runtime_config.headphones_enabled:
+                        PENDING_OUTPUT_REQUEST["value"] = "speaker"
+                    elif headphones_on and playback.headphone_volume_scale != runtime_config.headphone_max_percent / 100:
+                        run_playback_action(
+                            lambda: playback.set_headphones_output(True, runtime_config.headphone_max_percent),
+                            "headphone volume limit",
+                        )
+                    menu.set_headphones(runtime_config.headphones_enabled, headphones_on)
+                    STATUS_EXTRAS["headphones_available"] = runtime_config.headphones_enabled
                 woke_screen_saver, wake_input_quiet_until = consume_screen_saver_wake_input(
                     events,
                     screen_saver_visible,
@@ -1153,7 +1188,7 @@ def run_oled_service(
                             lambda selection: spoken_navigation.request(
                                 selection.text,
                                 delay_seconds=selection.delay_seconds,
-                                volume_percent=software_volume,
+                                volume_percent=speech_volume(software_volume, playback),
                                 muted=software_muted,
                             )
                             if runtime_config.spoken_navigation_enabled
@@ -1327,7 +1362,7 @@ def run_oled_service(
                     except Exception as error:
                         amp_pin_failed = True
                         print(f"MAX98357 amp shutdown could not start: {error}")
-                amp_off = effective_muted(software_volume, software_muted)
+                amp_off = effective_muted(software_volume, software_muted) or headphones_on
                 if runtime_config.amp_idle_off and now - last_sound_at >= AMP_IDLE_OFF_SECONDS:
                     amp_off = True
                 try:
@@ -1369,6 +1404,10 @@ def run_oled_service(
                     cached_home_frame = None
                     home_frame_loaded_at = now
                 for command in commands:
+                    if command.type == CommandType.SET_HEADPHONES:
+                        PENDING_OUTPUT_REQUEST["value"] = "headphones" if command.headphones else "speaker"
+                        menu_changed = True
+                        continue
                     if command.type == CommandType.SWITCH_PROFILE:
                         if command.profile_name and command.profile_name != runtime_config.active_profile:
                             queue_web_player_command("switch_profile", text=command.profile_name)
@@ -1417,6 +1456,27 @@ def run_oled_service(
                             DEFAULT_ACTIVE_BRIGHTNESS_PERCENT,
                             display_brightness_percent,
                         )
+                requested_output = PENDING_OUTPUT_REQUEST["value"]
+                PENDING_OUTPUT_REQUEST["value"] = ""
+                if requested_output in ("speaker", "headphones"):
+                    wanted = requested_output == "headphones" and runtime_config.headphones_enabled
+                    if wanted != headphones_on:
+                        headphones_on = wanted
+                        run_playback_action(
+                            lambda on=wanted: playback.set_headphones_output(on, runtime_config.headphone_max_percent),
+                            "audio output switch",
+                        )
+                        overlay = HEADPHONES_FRAME if wanted else SPEAKER_FRAME
+                        announcer.request(
+                            "Headphones" if wanted else "Speaker",
+                            volume_percent=speech_volume(software_volume, playback),
+                            muted=software_muted,
+                        )
+                        last_sound_at = now
+                    menu.set_headphones(runtime_config.headphones_enabled, headphones_on)
+                    STATUS_EXTRAS["output"] = "headphones" if headphones_on else "speaker"
+                    publish_web_player_status(playback, software_volume, software_muted, force=True)
+                    menu_changed = True
                 if web_refresh_library:
                     book_load_generation += 1
                     book_refresh_started = False
@@ -1722,8 +1782,7 @@ def handle_oled_input_events(
         if event.name == "nav_hold":
             print("Navigation hold received")
             if not bluetooth_available:
-                profiles = getattr(menu, "profiles", [])
-                if isinstance(profiles, list) and len(profiles) >= 2:
+                if getattr(menu, "quick_menu_available", False) is True:
                     if spoken_navigation_cancel is not None:
                         spoken_navigation_cancel()
                     previous_selection = menu.spoken_selection()

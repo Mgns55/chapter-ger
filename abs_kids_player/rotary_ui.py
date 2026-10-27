@@ -42,6 +42,7 @@ class CommandType(str, Enum):
     UNPAIR_BLUETOOTH_DEVICE = "unpair_bluetooth_device"
     CONFIRM_STILL_LISTENING = "confirm_still_listening"
     SWITCH_PROFILE = "switch_profile"
+    SET_HEADPHONES = "set_headphones"
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ class MenuCommand:
     bluetooth_device_address: str = ""
     bluetooth_device_name: str = ""
     profile_name: str = ""
+    headphones: bool = False
 
 
 @dataclass(frozen=True)
@@ -283,10 +285,11 @@ class ProfileMenuFrame:
     active: bool = False
     muted: bool = False
     bluetooth_connected: bool = False
+    title: str = "Quick menu"
 
     @property
     def top(self) -> str:
-        return "Profile"
+        return self.title
 
     @property
     def bottom(self) -> str:
@@ -393,6 +396,8 @@ class ApplianceMenu:
         self.resume_return_screen = Screen.LIBRARY
         self.profiles: list[str] = []
         self.active_profile = ""
+        self.headphones_available = False
+        self.headphones_active = False
         self.profile_index = 0
         self.profile_return_screen = Screen.LIBRARY
         self.rebuild_entries()
@@ -453,18 +458,43 @@ class ApplianceMenu:
         self.profiles = list(names)
         self.active_profile = active
 
+    def set_headphones(self, available: bool, active: bool) -> None:
+        self.headphones_available = available
+        self.headphones_active = active and available
+
+    @property
+    def quick_menu_available(self) -> bool:
+        return self.headphones_available or len(self.profiles) >= 2
+
     def open_profile_menu(self) -> None:
+        """Quick menu on a long press: speaker/headphones and profiles."""
         if self.screen != Screen.PROFILE:
             self.profile_return_screen = self.screen
-        options = self.profile_options
-        self.profile_index = next(
-            (i for i, name in enumerate(options) if name == self.active_profile), 0
-        )
+        options = self.quick_options
+        self.profile_index = next((i for i, (kind, _v, _l) in enumerate(options) if kind == "output"), None)
+        if self.profile_index is None:
+            self.profile_index = next(
+                (i for i, (kind, value, _l) in enumerate(options) if kind == "profile" and value == self.active_profile),
+                0,
+            )
         self.screen = Screen.PROFILE
+
+    open_quick_menu = open_profile_menu
+
+    @property
+    def quick_options(self) -> list[tuple[str, str, str]]:
+        """(kind, value, label) entries of the quick menu."""
+        options = [("back", "", "Back")]
+        if self.headphones_available:
+            label = "Output: Headphones" if self.headphones_active else "Output: Speaker"
+            options.append(("output", "", label))
+        if len(self.profiles) >= 2:
+            options.extend(("profile", name, name) for name in self.profiles)
+        return options
 
     @property
     def profile_options(self) -> list[str]:
-        return ["Back", *self.profiles]
+        return [label for _kind, _value, label in self.quick_options]
 
     def set_books(self, books: list[Book]) -> None:
         keep_book_id = self.books[self.book_index].id if self.books and self.book_index < len(self.books) else ""
@@ -541,7 +571,7 @@ class ApplianceMenu:
             if self.series_index > 0:
                 self.book_index = books[self.series_index - 1]
         elif self.screen == Screen.PROFILE:
-            self.profile_index = wrap_index(self.profile_index + direction, len(self.profile_options))
+            self.profile_index = wrap_index(self.profile_index + direction, len(self.quick_options))
         elif self.screen == Screen.STARTUP_RESUME:
             self.startup_resume_index = clamp(self.startup_resume_index + direction, 0, 1)
         elif self.screen == Screen.RESUME_CHOICE:
@@ -595,13 +625,15 @@ class ApplianceMenu:
             return []
 
         if self.screen == Screen.PROFILE:
-            choice = self.profile_options[self.profile_index]
+            options = self.quick_options
+            kind, value, _label = options[min(self.profile_index, len(options) - 1)]
             self.screen = self.profile_return_screen
-            if choice == "Back" and self.profile_index == 0:
+            if kind == "output":
+                self.headphones_active = not self.headphones_active
+                return [MenuCommand(CommandType.SET_HEADPHONES, headphones=self.headphones_active)]
+            if kind != "profile" or value == self.active_profile:
                 return []
-            if choice == self.active_profile:
-                return []
-            return [MenuCommand(CommandType.SWITCH_PROFILE, profile_name=choice)]
+            return [MenuCommand(CommandType.SWITCH_PROFILE, profile_name=value)]
 
         if self.screen == Screen.STARTUP_RESUME:
             state = self.startup_resume_state
@@ -794,10 +826,11 @@ class ApplianceMenu:
             )
 
         if self.screen == Screen.PROFILE:
-            options = self.profile_options
+            options = self.quick_options
             index = min(self.profile_index, len(options) - 1)
+            kind, value, label = options[index]
             return ProfileMenuFrame(
-                options[index], index, len(options), active=options[index] == self.active_profile and index > 0
+                label, index, len(options), active=kind == "profile" and value == self.active_profile
             )
 
         if self.screen == Screen.STARTUP_RESUME and self.startup_resume_state is not None:
@@ -862,7 +895,8 @@ class ApplianceMenu:
                 delay_seconds=BOOK_TITLE_SPEECH_DELAY_SECONDS,
             )
         if self.screen == Screen.PROFILE:
-            return SpokenSelection(self.profile_options[min(self.profile_index, len(self.profile_options) - 1)])
+            options = self.quick_options
+            return SpokenSelection(options[min(self.profile_index, len(options) - 1)][2])
         if self.screen == Screen.STARTUP_RESUME and self.startup_resume_state is not None:
             return SpokenSelection(("Continue", "Home")[self.startup_resume_index])
         if self.screen == Screen.RESUME_CHOICE:

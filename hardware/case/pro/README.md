@@ -13,7 +13,7 @@
   - mit etwas Dämmwolle etwas tiefer
 - MAX98357A
 - 2 × KY-040 oben, beschriftet mit „Menü“ und „Lautstärke“
-- 3,5-mm-Kopfhörerbuchse (Einbaubuchse im D-Format, Flansch 31 × 26 mm) oben hinter den Knöpfen; das 18-cm-Kabel steckt in der Klinkenbuchse des Pi 3 A+
+- 3,5-mm-Kopfhörerbuchse (Einbaubuchse im D-Format, Flansch 31 × 26 mm) an der rechten Seite auf halber Höhe; das 18-cm-Kabel steckt in der Klinkenbuchse des Pi 3 A+
 - „Franz Pro“ ist klein auf der Unterseite eingraviert
 
 ## Teile
@@ -56,7 +56,7 @@
    - Die KY-040 von innen durch die Löcher oben stecken und mit Unterlegscheibe und Mutter festziehen.
    - Die Wand dort ist auf 2 mm verdünnt.
 6. **Rückwand bestücken:**
-   - Den Pi/PiSugar-Stapel mit dem Akku nach unten zwischen die 4 Eckführungen legen – die Seite mit HDMI- und Klinkenbuchse nach oben, sonst passt der Klinkenstecker nicht.
+   - Den Pi/PiSugar-Stapel mit dem Akku nach unten zwischen die 4 Eckführungen legen – die Seite mit HDMI- und Klinkenbuchse nach oben und die Klinkenbuchse nach links (zur Trennwand), damit der Stecker nicht an die Kopfhörerbuchse stößt.
    - Mit 2 Klett-Kabelbindern durch die Ösen festzurren. Alle Kanten bleiben frei.
    - Die USB-C-Einbaubuchse in die Rückwand schrauben und das Kabel in den USB-C-Anschluss des PiSugar stecken.
 7. **Gehäuse schließen:**

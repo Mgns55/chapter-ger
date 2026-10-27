@@ -4,6 +4,13 @@ All notable changes to Chapter Player for Audiobookshelf are documented here.
 
 ## Unreleased
 
+## [0.3.20] - 2026-10-27 (Mgns55/chapter-ger)
+
+- Kopfhörer: optionale Kopfhörerbuchse an der Klinke des Pi. Umschalten im Schnellmenü (Menü-Knopf 3 s halten), auf der Setup-Seite oder aus Home Assistant; eigene Höchstlautstärke für Kopfhörer, der Verstärker ist dabei aus. Nach dem Neustart immer Lautsprecher.
+- Langer Druck auf den Menü-Knopf öffnet das Schnellmenü (Ausgabe und Profile), solange Bluetooth aus ist.
+- ALSA spricht die Soundkarten jetzt über ihren Namen an; die Klinke des Pi bleibt eingeschaltet (dtparam=audio=on).
+- Gehäuse Chapter Pro: Kopfhörerbuchse an der rechten Seite, "Franz Pro" auf der Unterseite.
+
 ## [0.3.19] - 2026-10-26 (Mgns55/chapter-ger)
 
 - Serien werden im Menü zu einem Eintrag zusammengefasst; Auswahl öffnet die Folgen in Reihenfolge (mit "Zurück").

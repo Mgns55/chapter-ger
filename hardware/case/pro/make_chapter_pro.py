@@ -86,11 +86,12 @@ PI_GUIDE_H, PI_GUIDE_LEG, PI_GUIDE_T = 12.0, 9.0, 2.0
 # back panel openings
 USB = (135.0, 105.0)                          # USB-C panel-mount socket (x, z)
 
-# 3.5 mm headphone socket on the top (D-size flange 31 x 26 mm, body ~20 mm, 42 mm deep),
-# behind the knobs above the electronics compartment - not above the sealed speaker chamber
-JACK = (167.0, 82.0)                          # (x, y) on the top
+# 3.5 mm headphone socket on the right side (D-size flange 31 x 26 mm, body ~20 mm, 42 mm deep),
+# half-way up, between the display (front), the encoders (top) and the Pi (below)
+JACK = (55.0, 88.0)                           # (y, z) on the right side wall
 JACK_CUTOUT_R = 11.25                         # 22.5 mm hole, the flange covers it
-JACK_SCREWS = ((12.0, 9.5), (-12.0, -9.5))    # diagonal M3 holes (D-size pattern 24 x 19 mm)
+JACK_TEARDROP_TOP = 12.75                     # flat-topped teardrop: prints without support
+JACK_SCREWS = ((12.0, 9.5), (-12.0, -9.5))    # diagonal M3 holes (D-size pattern 24 x 19 mm), (dy, dz)
 
 NAME_TEXT = "Franz Pro"                       # engraved on the bottom
 NAME_CAP = 5.0
@@ -214,10 +215,15 @@ def build_body() -> mf.Manifold:
     name = text_solid(NAME_TEXT, cap_size(NAME_CAP), 1.6).mirror([0, 1, 0])   # letter "up" = towards the front
     body -= name.translate([W / 2, BODY_D / 2 + cap_size(NAME_CAP) * 0.36, -1.0])
 
-    # headphone socket on the top
-    jx, jy = JACK
-    body -= cyl_z(jx, jy, H - WALL - 1, H + 1, JACK_CUTOUT_R, 96)
-    body -= union([cyl_z(jx + dx, jy + dy, H - WALL - 1, H + 1, 1.7, 24) for dx, dy in JACK_SCREWS])
+    # headphone socket on the right side wall. The wall stands upright while printing with
+    # +y pointing up, so the hole gets a flat-topped teardrop towards +y (hidden by the flange).
+    jy, jz = JACK
+    x0, x1 = W - WALL - 1, W + 1
+    hole = cyl_x(jy, jz, x0, x1, JACK_CUTOUT_R, 96)
+    tip_half = max(0.5, JACK_CUTOUT_R * 2 ** 0.5 - JACK_TEARDROP_TOP)
+    tip = mf.Manifold.cube([x1 - x0, 0.01, 2 * tip_half]).translate([x0, jy + JACK_TEARDROP_TOP, jz - tip_half])
+    body -= mf.Manifold.batch_hull([hole, tip])
+    body -= union([cyl_x(jy + dy, jz + dz, x0, x1, 1.7, 24) for dy, dz in JACK_SCREWS])
 
     # knobs on the top: holes, thinned wall under the nut, engraved labels
     for text, kx in KNOBS:

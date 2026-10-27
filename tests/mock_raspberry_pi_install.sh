@@ -61,7 +61,7 @@ run_installer() {
 run_installer
 run_installer
 
-assert_line_once "$BOOT_CONFIG" "#dtparam=audio=on"
+assert_line_once "$BOOT_CONFIG" "dtparam=audio=on"
 assert_line_once "$BOOT_CONFIG" "dtparam=spi=on"
 assert_line_once "$BOOT_CONFIG" "dtoverlay=max98357a"
 assert_line_once "$BOOT_CONFIG" "dtoverlay=i2s-mmap"
@@ -94,8 +94,8 @@ assert_contains "$MOCK_INSTALL_LOG" "gstreamer1.0-libav"
 assert_contains "$MOCK_INSTALL_LOG" "espeak-ng"
 assert_contains "$MOCK_INSTALL_LOG" "bluez-alsa-utils"
 assert_contains "$MOCK_INSTALL_LOG" "git clone --no-checkout"
-assert_contains "$MOCK_INSTALL_LOG" "git -C $INSTALL_DIR checkout --detach v0.3.19"
-assert_contains "$MOCK_INSTALL_LOG" "git -C $INSTALL_DIR checkout --force --detach v0.3.19"
+assert_contains "$MOCK_INSTALL_LOG" "git -C $INSTALL_DIR checkout --detach v0.3.20"
+assert_contains "$MOCK_INSTALL_LOG" "git -C $INSTALL_DIR checkout --force --detach v0.3.20"
 assert_contains "$MOCK_INSTALL_LOG" "git -C $INSTALL_DIR fetch --force --tags origin"
 assert_contains "$MOCK_INSTALL_LOG" "systemctl enable"
 assert_contains "$MOCK_INSTALL_LOG" "audiobookshelf-player-oled.service"

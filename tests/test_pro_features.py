@@ -270,5 +270,58 @@ class Ssd1322Test(unittest.TestCase):
         self.assertEqual(boot_splash.rotate_packed_180(b"\x12\x34"), b"\x43\x21")
 
 
+class HeadphoneTest(unittest.TestCase):
+    def test_quick_menu_toggles_output(self):
+        menu = ApplianceMenu(list(LIBRARY))
+        self.assertFalse(menu.quick_menu_available)
+        menu.set_headphones(True, False)
+        self.assertTrue(menu.quick_menu_available)
+        menu.open_quick_menu()
+        self.assertEqual(menu.render().name, "Output: Speaker")
+        commands = menu.click_nav()
+        self.assertEqual(commands[0].type, CommandType.SET_HEADPHONES)
+        self.assertTrue(commands[0].headphones)
+        menu.open_quick_menu()
+        self.assertEqual(menu.render().name, "Output: Headphones")
+
+    def test_quick_menu_with_profiles_and_output(self):
+        menu = ApplianceMenu(list(LIBRARY))
+        menu.set_headphones(True, False)
+        menu.set_profiles(["Mika", "Janne"], "Mika")
+        self.assertEqual(menu.profile_options, ["Back", "Output: Speaker", "Mika", "Janne"])
+
+    def test_playback_caps_headphone_volume(self):
+        from abs_kids_player.playback import GStreamerPlayback
+
+        playback = GStreamerPlayback()
+        playback.volume_percent = 80
+        with patch("abs_kids_player.playback.set_headphone_mixer_level") as mixer:
+            playback.set_headphones_output(True, 50)
+        mixer.assert_called_once()
+        self.assertAlmostEqual(playback.target_effective_volume(), 0.4)
+        self.assertEqual(playback.audio_output_device, "headphones")
+        playback.set_headphones_output(False)
+        self.assertAlmostEqual(playback.target_effective_volume(), 0.8)
+        self.assertEqual(playback.audio_output_device, "")
+
+    def test_speech_follows_limit(self):
+        from abs_kids_player.oled_service import speech_volume
+
+        class P:
+            headphones_output = True
+            headphone_volume_scale = 0.5
+
+        self.assertEqual(speech_volume(60, P()), 30)
+
+    def test_mqtt_output_select(self):
+        messages = mqtt_bridge.discovery_messages(WebPlayerStatus(headphones_available=True))
+        self.assertTrue(any(t.endswith("/output/config") for t, _ in messages))
+        payload = mqtt_bridge.status_payload(WebPlayerStatus(output="headphones"), 0)
+        self.assertEqual(payload["output"], "Kopfhörer")
+        with patch("abs_kids_player.mqtt_bridge.queue_web_player_command") as queue:
+            mqtt_bridge.handle_message(f"{mqtt_bridge.base_topic()}/output/set", "Kopfhörer")
+        queue.assert_called_once_with("set_output", text="headphones")
+
+
 if __name__ == "__main__":
     unittest.main()

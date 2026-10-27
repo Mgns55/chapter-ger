@@ -58,6 +58,7 @@ def status_payload(status: WebPlayerStatus, profile_seconds_today: float) -> dic
         "charging": "ON" if status.charging else "OFF",
         "profile": status.profile,
         "listened_today": round(profile_seconds_today / 60),
+        "output": "Kopfhörer" if status.output == "headphones" else "Lautsprecher",
     }
 
 
@@ -132,6 +133,16 @@ def discovery_messages(status: WebPlayerStatus) -> list[tuple[str, dict[str, Any
                  "device_class": "battery_charging"},
             )
         )
+    if status.headphones_available:
+        messages.append(
+            (
+                f"{DISCOVERY_PREFIX}/select/{node}/output/config",
+                {**common, "name": "Ausgabe", "unique_id": f"{node}_output",
+                 "state_topic": f"{base}/state", "value_template": "{{ value_json.output }}",
+                 "command_topic": f"{base}/output/set", "options": ["Lautsprecher", "Kopfhörer"],
+                 "icon": "mdi:headphones"},
+            )
+        )
     if status.profiles:
         messages.append(
             (
@@ -155,6 +166,9 @@ def handle_message(topic: str, payload: str) -> None:
             queue_web_player_command("volume", min(max(int(float(payload)), 0), 100))
         except ValueError:
             pass
+    elif topic == f"{base}/output/set" and payload:
+        wanted = "headphones" if payload.casefold() in {"kopfhörer", "headphones"} else "speaker"
+        queue_web_player_command("set_output", text=wanted)
     elif topic == f"{base}/profile/set" and payload:
         queue_web_player_command("switch_profile", text=payload)
 
@@ -211,7 +225,8 @@ def run_bridge() -> None:
                         def on_connect(c, _userdata, _flags, *rest):
                             nonlocal last_discovery_key, last_payload
                             base = base_topic()
-                            c.subscribe([(f"{base}/command", 0), (f"{base}/volume/set", 0), (f"{base}/profile/set", 0)])
+                            c.subscribe([(f"{base}/command", 0), (f"{base}/volume/set", 0), (f"{base}/profile/set", 0),
+                                         (f"{base}/output/set", 0)])
                             c.publish(f"{base}/availability", "online", retain=True)
                             last_discovery_key = ()
                             last_payload = None
@@ -229,7 +244,7 @@ def run_bridge() -> None:
                 status = WebPlayerStatus(volume_percent=status.volume_percent, profile=status.profile,
                                          profiles=status.profiles, battery_percent=status.battery_percent,
                                          charging=status.charging)
-            discovery_key = (status.battery_percent >= 0, status.profiles)
+            discovery_key = (status.battery_percent >= 0, status.profiles, status.headphones_available)
             if discovery_key != last_discovery_key:
                 for topic, payload in discovery_messages(status):
                     client.publish(topic, json.dumps(payload, ensure_ascii=False), retain=True)

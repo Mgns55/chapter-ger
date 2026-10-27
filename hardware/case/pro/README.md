@@ -13,7 +13,7 @@
   - mit etwas Dämmwolle etwas tiefer
 - MAX98357A
 - 2 × KY-040 oben, beschriftet mit „Menü“ und „Lautstärke“
-- 3,5-mm-Kopfhörerbuchse (Einbaubuchse im D-Format, Flansch 31 × 26 mm) an der rechten Seite auf halber Höhe; das 18-cm-Kabel steckt in der Klinkenbuchse des Pi 3 A+
+- 3,5-mm-Kopfhörerbuchse (YACSEJAO D-Typ-Einbaukabel, 18 cm) an der rechten Seite auf halber Höhe, **von innen** montiert: außen sieht man nur die runde schwarze Front (Loch Ø 20,6 mm), keine Schrauben. Das Kabel steckt in der Klinkenbuchse des Pi 3 A+
 - „Franz Pro“ ist klein auf der Unterseite eingraviert
 
 ## Teile
@@ -23,6 +23,7 @@
 | `stl/chapter-pro-gehaeuse.stl` | 1 | Front nach unten, **ohne Stützen** |
 | `stl/chapter-pro-rueckwand.stl` | 1 | Außenseite nach unten |
 | `stl/chapter-pro-lautsprecherring.stl` | 1 | flache Seite nach unten |
+| `stl/chapter-pro-kopfhoererhalter.stl` | 1 | flache Seite nach unten |
 | `../stl/chapter-case-knob-v5.stl` | 2 | wie beim Original |
 
 **Empfohlene Einstellungen:**
@@ -32,9 +33,10 @@
 
 ## Kleinteile
 
-- **Gewindeeinsätze M3** (Ø 4,0 mm Bohrung, ca. 5,7 mm lang): 10 Stück
+- **Gewindeeinsätze M3** (Ø 4,0 mm Bohrung, ca. 5,7 mm lang): 12 Stück
   - 6 in die Säulen für die Rückwand
   - 4 in die Lautsprecher-Dome
+  - 2 in die Dome neben der Kopfhörerbuchse
 - **Schrauben:**
   - 6 × M3×10 (Zylinderkopf) für die Rückwand
   - 4 × M3×12 für den Lautsprecherring
@@ -44,22 +46,23 @@
 - **Moosgummi-Dichtband** (ca. 3 × 2 mm) auf die hintere Kante der Lautsprecherkammer
 - etwas **Dämmwolle** oder Polyesterwatte für die Kammer
 - **4 Gummifüße** Ø 10 mm, für die Mulden im Boden
-- **2 × M3×8 mit Mutter** für die Kopfhörerbuchse (Löcher diagonal 25 mm waagerecht / ca. 19 mm senkrecht, Ausschnitt Ø 22,5 mm)
+- **2 × M3×12** für den Kopfhörerhalter (die mitgelieferten Schrauben und Muttern der Buchse werden nicht gebraucht)
 
 ## Montage
 
 1. **Gewindeeinsätze einschmelzen.**
 2. **Lautsprecher:** Den ND90-4 von innen in den Zentrierring über dem Gitter legen. Den Lautsprecherring mit dem Rand zum Lautsprecher aufsetzen und mit 4 × M3×12 festziehen. So spielt der Lochkreis des Lautsprecherkorbs keine Rolle.
 3. **Kabel:** Das Lautsprecherkabel durch das Loch in der Trennwand führen und das Loch mit Heißkleber abdichten. Die Kammer locker mit Dämmwolle füllen.
-4. **Display:** Das Modul mit den Pins nach rechts (von vorn gesehen) auf die 4 Dome legen und mit 4 Blechschrauben festschrauben. Das Fenster sitzt genau über der Leuchtfläche laut Datenblatt.
-5. **Drehgeber:**
+4. **Kopfhörerbuchse:** Den Halter über Kabel und Buchsenkörper schieben, die Buchse von innen mit dem Flansch in die flache Mulde um das runde Loch legen (runde Front zeigt nach außen) und den Halter mit 2 × M3×12 auf die beiden Dome schrauben. Der Rand des Halters drückt den Flansch an die Wand.
+5. **Display:** Das Modul mit den Pins nach rechts (von vorn gesehen) auf die 4 Dome legen und mit 4 Blechschrauben festschrauben. Das Fenster sitzt genau über der Leuchtfläche laut Datenblatt.
+6. **Drehgeber:**
    - Die KY-040 von innen durch die Löcher oben stecken und mit Unterlegscheibe und Mutter festziehen.
    - Die Wand dort ist auf 2 mm verdünnt.
-6. **Rückwand bestücken:**
+7. **Rückwand bestücken:**
    - Den Pi/PiSugar-Stapel mit dem Akku nach unten zwischen die 4 Eckführungen legen – die Seite mit HDMI- und Klinkenbuchse nach oben und die Klinkenbuchse nach links (zur Trennwand), damit der Stecker nicht an die Kopfhörerbuchse stößt.
    - Mit 2 Klett-Kabelbindern durch die Ösen festzurren. Alle Kanten bleiben frei.
    - Die USB-C-Einbaubuchse in die Rückwand schrauben und das Kabel in den USB-C-Anschluss des PiSugar stecken.
-7. **Gehäuse schließen:**
+8. **Gehäuse schließen:**
    - Dichtband auf die Kammerkante kleben.
    - Rückwand aufsetzen und mit 6 × M3×10 verschrauben.
 

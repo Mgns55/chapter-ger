@@ -86,14 +86,17 @@ PI_GUIDE_H, PI_GUIDE_LEG, PI_GUIDE_T = 12.0, 9.0, 2.0
 # back panel openings
 USB = (135.0, 105.0)                          # USB-C panel-mount socket (x, z)
 
-# 3.5 mm headphone socket on the right side (D-size flange 31 x 26 mm, body ~20 mm, 42 mm deep),
-# half-way up, between the display (front), the encoders (top) and the Pi (below)
+# 3.5 mm headphone socket (YACSEJAO D-type panel cable: flange 31 x 26 mm, round front 20 mm,
+# body ~20 mm, 42 mm deep) on the right side, half-way up. It is mounted from the INSIDE:
+# only the round black front shows through a round hole, no screws visible. The flange sits
+# in a 1 mm pocket (wall 2 mm there) and a printed clamp, screwed to two pads, holds it.
 JACK = (55.0, 88.0)                           # (y, z) on the right side wall
-JACK_CUTOUT_R = 11.25                         # 22.5 mm hole, the flange covers it
-JACK_TEARDROP_TOP = 12.75                     # flat-topped teardrop: prints without support
-# Socket drawing: flange 31 x 26 mm, front ring 20 mm, holes 3 mm, 25 mm apart horizontally
-# (vertical offset not dimensioned, ~19 mm measured from the drawing). (dy, dz) from the centre.
-JACK_SCREWS = ((12.5, 9.5), (-12.5, -9.5))
+JACK_FRONT_R = 10.3                           # 20.6 mm round hole for the 20 mm front
+JACK_FLANGE = (31.6, 26.6)                    # pocket for the flange (y, z), 0.3 mm play per side
+JACK_POCKET_DEPTH = 1.0
+JACK_PAD_OFFSET = 21.0                        # clamp pads left/right of the flange (y offset)
+JACK_PAD_R, JACK_PAD_H = 4.5, 7.0             # pads stick 7 mm into the case, M3 insert inside
+JACK_CLAMP_RIM_H = 7.0                        # clamp rim reaches from the pad tops to the flange
 
 NAME_TEXT = "Franz Pro"                       # engraved on the bottom
 NAME_CAP = 5.0
@@ -217,15 +220,23 @@ def build_body() -> mf.Manifold:
     name = text_solid(NAME_TEXT, cap_size(NAME_CAP), 1.6).mirror([0, 1, 0])   # letter "up" = towards the front
     body -= name.translate([W / 2, BODY_D / 2 + cap_size(NAME_CAP) * 0.36, -1.0])
 
-    # headphone socket on the right side wall. The wall stands upright while printing with
-    # +y pointing up, so the hole gets a flat-topped teardrop towards +y (hidden by the flange).
+    # headphone socket, mounted from the inside of the right side wall
     jy, jz = JACK
-    x0, x1 = W - WALL - 1, W + 1
-    hole = cyl_x(jy, jz, x0, x1, JACK_CUTOUT_R, 96)
-    tip_half = max(0.5, JACK_CUTOUT_R * 2 ** 0.5 - JACK_TEARDROP_TOP)
-    tip = mf.Manifold.cube([x1 - x0, 0.01, 2 * tip_half]).translate([x0, jy + JACK_TEARDROP_TOP, jz - tip_half])
-    body -= mf.Manifold.batch_hull([hole, tip])
-    body -= union([cyl_x(jy + dy, jz + dz, x0, x1, 1.7, 24) for dy, dz in JACK_SCREWS])
+    inner = W - WALL
+    fy, fz = JACK_FLANGE
+    pocket = (mf.Manifold.cube([JACK_POCKET_DEPTH + 1, fy, fz]).translate([inner - 1, jy - fy / 2, jz - fz / 2]))
+    body -= pocket
+    body -= cyl_x(jy, jz, inner - 2, W + 1, JACK_FRONT_R, 128)
+    # clamp pads; teardrop-shaped towards -y because the wall prints upright with +y up
+    pads = []
+    for dy in (-JACK_PAD_OFFSET, JACK_PAD_OFFSET):
+        pad = cyl_x(jy + dy, jz, inner - JACK_PAD_H, inner + 0.1, JACK_PAD_R, 48)
+        tip = mf.Manifold.cube([JACK_PAD_H + 0.1, 0.01, 1.0]).translate(
+            [inner - JACK_PAD_H, jy + dy - JACK_PAD_R * 2 ** 0.5, jz - 0.5])
+        pads.append(mf.Manifold.batch_hull([pad, tip]))
+    body += union(pads)
+    body -= union([cyl_x(jy + dy, jz, inner - JACK_PAD_H - 1, inner - 1.0, M3_INSERT_R, 32)
+                   for dy in (-JACK_PAD_OFFSET, JACK_PAD_OFFSET)])
 
     # knobs on the top: holes, thinned wall under the nut, engraved labels
     for text, kx in KNOBS:
@@ -322,6 +333,22 @@ def build_speaker_ring() -> mf.Manifold:
     return ring
 
 
+def build_jack_clamp() -> mf.Manifold:
+    """Clamp for the headphone socket: plate on the pads, rim pressing the flange to the wall.
+    Printed plate down, rim up. Slide it over the cable before fitting the socket."""
+    off = JACK_PAD_OFFSET
+    plate = mf.Manifold.batch_hull([
+        mf.Manifold.cylinder(3.0, 14.0, 14.0, 96),
+        mf.Manifold.cylinder(3.0, 5.5, 5.5, 48).translate([off, 0, 0]),
+        mf.Manifold.cylinder(3.0, 5.5, 5.5, 48).translate([-off, 0, 0]),
+    ])
+    rim = mf.Manifold.cylinder(3.0 + JACK_CLAMP_RIM_H, 12.5, 12.5, 96)
+    clamp = (plate + rim) - mf.Manifold.cylinder(20, 10.75, 10.75, 96).translate([0, 0, -5])
+    for x in (-off, off):
+        clamp -= mf.Manifold.cylinder(20, 1.7, 1.7, 32).translate([x, 0, -5])
+    return clamp
+
+
 def build_display_clamps() -> mf.Manifold:
     """Four 14 x 8 x 2.5 mm clamps with a slotted M2.5 hole, laid out for printing."""
     clamps = []
@@ -347,6 +374,7 @@ def main(out_dir="."):
         "chapter-pro-gehaeuse.stl": to_print_body(build_body()),
         "chapter-pro-rueckwand.stl": to_print_panel(build_back_panel()),
         "chapter-pro-lautsprecherring.stl": build_speaker_ring(),
+        "chapter-pro-kopfhoererhalter.stl": build_jack_clamp(),
     }
     for name, m in parts.items():
         mesh = to_trimesh(m)

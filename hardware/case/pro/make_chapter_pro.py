@@ -70,8 +70,13 @@ OLED_PILOT_R = 1.05                           # 2.1 mm pilot for 2.5 x 6 mm self
 # encoders on the top
 KNOBS = [("Menü", 144.5), ("Lautstärke", 189.5)]
 KNOB_Y = 50.0
-KNOB_HOLE_R = 3.6                             # 7.2 mm for the M7 bushing
-KNOB_RECESS_R = 11.0                          # wall thinned to 2 mm under the nut
+# KY-040 mounting copied from the original Chapter case (chapter-case-back-v5.stl, same 3 mm top):
+# 21 mm knob recess, 13.4 mm through hole, two posts with M2.5 inserts 17.5 mm long, one rib.
+KNOB_RECESS_R, KNOB_RECESS_DEPTH = 10.5, 1.75
+KNOB_HOLE_R = 6.72
+KY040_POSTS = ((8.3, -5.8), (8.8, 11.1))      # (dx, dy) from the encoder axis
+KY040_POST_R, KY040_POST_LEN = 3.5, 17.5
+KY040_RIB = (8.1, 13.1, -9.55, 12.45)          # dx0, dx1, dy0, dy1
 LABEL_BASELINE_Y = 27.0
 LABEL_CAP = 4.5
 ENGRAVE = 1.0
@@ -239,9 +244,25 @@ def build_body() -> mf.Manifold:
                    for dy in (-JACK_PAD_OFFSET, JACK_PAD_OFFSET)])
 
     # knobs on the top: holes, thinned wall under the nut, engraved labels
+    top_inner = H - WALL
     for text, kx in KNOBS:
-        body -= cyl_z(kx, KNOB_Y, H - WALL - 1, H + 1, KNOB_HOLE_R)
-        body -= cyl_z(kx, KNOB_Y, H - WALL - 1, H - 2.0, KNOB_RECESS_R)
+        body -= cyl_z(kx, KNOB_Y, H - KNOB_RECESS_DEPTH, H + 1, KNOB_RECESS_R, 96)
+        body -= cyl_z(kx, KNOB_Y, top_inner - 1, H + 1, KNOB_HOLE_R, 96)
+        # KY-040 mount. The top wall prints upright with +y up, so the rib runs the full post
+        # length and the posts are teardrops pointing -y: no supports needed.
+        dx0, dx1, dy0, dy1 = KY040_RIB
+        bottom = top_inner - KY040_POST_LEN
+        rib = mf.Manifold.cube([dx1 - dx0, dy1 - dy0, KY040_POST_LEN - 1.0]).translate(
+            [kx + dx0, KNOB_Y + dy0, bottom + 1.0])
+        parts = [rib.translate([0, 0, 0.1])]
+        for dx, dy in KY040_POSTS:
+            post = cyl_z(kx + dx, KNOB_Y + dy, bottom, top_inner + 0.1, KY040_POST_R, 48)
+            tip = mf.Manifold.cube([1.0, 0.01, KY040_POST_LEN + 0.1]).translate(
+                [kx + dx - 0.5, KNOB_Y + dy - KY040_POST_R * 2 ** 0.5, bottom])
+            parts.append(mf.Manifold.batch_hull([post, tip]))
+        body += union(parts)
+        body -= union([cyl_z(kx + dx, KNOB_Y + dy, bottom - 1, bottom + 5.0, M25_INSERT_R, 32)
+                       for dx, dy in KY040_POSTS])
     size = cap_size(LABEL_CAP)
     widest = max(TextPath((0, 0), t, size=1, prop=FONT).get_extents().width for t, _ in KNOBS)
     size = min(size, 38.0 / widest)

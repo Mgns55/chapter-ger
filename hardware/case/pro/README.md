@@ -33,7 +33,7 @@
 
 ## Kleinteile
 
-- **Gewindeeinsätze M2,5** (Ø 3,1 mm Bohrung, wie beim Original-Chapter): 4 Stück für die Drehgeber
+- **Gewindeeinsätze M2,5** (Ø 3,1 mm Bohrung, wie beim Original-Chapter): 6 Stück – 4 für die Drehgeber, 2 für den Verstärker
 - **Gewindeeinsätze M3** (Ø 4,0 mm Bohrung, ca. 5,7 mm lang): 12 Stück
   - 6 in die Säulen für die Rückwand
   - 4 in die Lautsprecher-Dome
@@ -42,7 +42,7 @@
   - 6 × M3×10 (Zylinderkopf) für die Rückwand
   - 4 × M3×12 für den Lautsprecherring
   - 4 × Blechschraube 2,5 × 6 mm für das Display (in die vorgebohrten Dome)
-  - 4 × M2,5×5 für die Drehgeber
+  - 6 × M2,5×5 für Drehgeber und Verstärker
 - **2 Klett-Kabelbinder**, bis 12 mm breit, für den Pi/PiSugar-Stapel
 - **USB-C-Einbaubuchse mit gewinkeltem Kabel**: Flansch ca. 25 × 8 mm, Gewindelöcher 17 mm Mittenabstand. Der Flansch sitzt außen in einer 2 mm tiefen Mulde, verschraubt wird von innen.
 - **Moosgummi-Dichtband** (ca. 3 × 2 mm) auf die hintere Kante der Lautsprecherkammer
@@ -57,12 +57,13 @@
 3. **Kabel:** Das Lautsprecherkabel durch das Loch in der Trennwand führen und das Loch mit Heißkleber abdichten. Die Kammer locker mit Dämmwolle füllen.
 4. **Kopfhörerbuchse:** Den Halter über Kabel und Buchsenkörper schieben, die Buchse von innen mit dem Flansch in die flache Mulde um das runde Loch legen (runde Front zeigt nach außen) und den Halter mit 2 × M3×12 auf die beiden Dome schrauben. Der Rand des Halters drückt den Flansch an die Wand.
 5. **Display:** Das Modul mit den Pins nach rechts (von vorn gesehen) auf die 4 Dome legen und mit 4 Blechschrauben festschrauben. Das Fenster sitzt genau über der Leuchtfläche laut Datenblatt.
-6. **Drehgeber:** Wie beim Original-Chapter: jeden KY-040 mit 2 × M2,5×5 von unten an die zwei Dome neben seinem Loch schrauben (Achse nach oben durch das Loch), dann die Knöpfe aufstecken. Sie sitzen in einer flachen Mulde im Deckel.
-7. **Rückwand bestücken:**
+6. **Verstärker:** Den MAX98357A mit 2 × M2,5×5 auf die zwei Dome an der Trennwand schrauben (Lochabstand 13,2 mm wie im Original-Chapter), Lautsprecherkabel kommt direkt daneben durch die Trennwand.
+7. **Drehgeber:** Wie beim Original-Chapter: jeden KY-040 mit 2 × M2,5×5 von unten an die zwei Dome neben seinem Loch schrauben (Achse nach oben durch das Loch), dann die Knöpfe aufstecken. Sie sitzen in einer flachen Mulde im Deckel.
+8. **Rückwand bestücken:**
    - Den Pi/PiSugar-Stapel mit dem Akku nach unten zwischen die 4 Eckführungen legen – die Seite mit HDMI- und Klinkenbuchse nach oben und die Klinkenbuchse nach links (zur Trennwand), damit der Stecker nicht an die Kopfhörerbuchse stößt.
    - Mit 2 Klett-Kabelbindern durch die Ösen festzurren. Alle Kanten bleiben frei.
    - Die USB-C-Einbaubuchse in die Rückwand schrauben und das Kabel in den USB-C-Anschluss des PiSugar stecken.
-8. **Gehäuse schließen:**
+9. **Gehäuse schließen:**
    - Dichtband auf die Kammerkante kleben.
    - Rückwand aufsetzen und mit 6 × M3×10 verschrauben.
 

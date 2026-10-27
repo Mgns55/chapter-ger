@@ -1137,10 +1137,8 @@ class LibraryEntry:
 
 
 def series_sort_key(book: Book) -> tuple[float, str]:
-    try:
-        sequence = float(str(book.series_sequence).replace(",", "."))
-    except ValueError:
-        sequence = float("inf")
+    match = re.search(r"\d+(?:[.,]\d+)?", str(book.series_sequence or ""))
+    sequence = float(match.group(0).replace(",", ".")) if match else float("inf")
     return (sequence, book.title.casefold())
 
 

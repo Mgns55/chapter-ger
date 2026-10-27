@@ -188,6 +188,7 @@ class ApiMetadataTest(unittest.TestCase):
             "request",
             side_effect=[
                 {"results": [{"name": "The Wild Robot", "numBooks": 3}]},
+                {"mediaProgress": []},
                 {"results": [item]},
             ],
         ):
@@ -218,12 +219,31 @@ class ApiMetadataTest(unittest.TestCase):
             "request",
             side_effect=[
                 {"results": []},
+                {"mediaProgress": []},
                 {"results": [item("book-2", 2), item("book-7", 7)]},
             ],
         ):
             books = client.get_books("library-1")
 
         self.assertEqual([book.series_position for book in books], ["2/7", "7/7"])
+
+    def test_get_books_reads_progress_in_one_request(self) -> None:
+        client = AudiobookshelfClient("https://books.example.com", "token")
+        item = {"id": "book-9", "media": {"duration": 100, "metadata": {"title": "Ohne Fortschritt"}}}
+        calls = []
+
+        def fake_request(method, path, **kwargs):
+            calls.append(path)
+            if path.endswith("/series"):
+                return {"results": []}
+            if path == "/api/me":
+                return {"mediaProgress": [{"libraryItemId": "book-9", "currentTime": 42, "progress": 0.42}]}
+            return {"results": [item]}
+
+        with patch.object(client, "request", side_effect=fake_request):
+            books = client.get_books("library-1")
+        self.assertEqual(books[0].current_time, 42)
+        self.assertFalse(any("/api/me/progress/" in path for path in calls))
 
     def test_request_converts_socket_timeout_to_audiobookshelf_error(self) -> None:
         client = AudiobookshelfClient("https://books.example.com", "token")

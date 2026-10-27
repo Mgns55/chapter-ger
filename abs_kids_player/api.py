@@ -213,8 +213,24 @@ class AudiobookshelfClient:
             return data
         raise AudiobookshelfError("Audiobookshelf did not return current user details.")
 
+    def get_all_progress(self) -> dict[str, dict[str, Any]] | None:
+        """All listening progress of this user in one request (instead of one per book)."""
+        try:
+            data = self.request("GET", "/api/me")
+        except AudiobookshelfError:
+            return None
+        rows = data.get("mediaProgress") if isinstance(data, dict) else None
+        if not isinstance(rows, list):
+            return None
+        progress: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            if isinstance(row, dict) and row.get("libraryItemId") and not row.get("episodeId"):
+                progress[str(row["libraryItemId"])] = row
+        return progress
+
     def get_books(self, library_id: str) -> list[Book]:
         series_totals = self.get_series_totals(library_id)
+        all_progress = self.get_all_progress()
         data = self.request(
             "GET",
             f"/api/libraries/{library_id}/items",
@@ -245,15 +261,22 @@ class AudiobookshelfClient:
                 series_sequence=series_sequence,
             )
             if not book.current_time:
-                remote_progress = self.get_progress(book.id) or {}
+                if all_progress is not None:
+                    remote_progress = all_progress.get(book.id) or {}
+                else:
+                    try:
+                        remote_progress = self.get_progress(book.id) or {}
+                    except AudiobookshelfError as error:
+                        print(f"Progress for {book.title} unavailable: {error}")
+                        remote_progress = {}
                 book.current_time = float(remote_progress.get("currentTime") or 0)
                 book.progress = float(remote_progress.get("progress") or 0)
             books.append(book)
             series_keys.append(series_key)
             if series_key:
                 fallback_counts[series_key] = fallback_counts.get(series_key, 0) + 1
-                if series_sequence:
-                    sequence_ceiling = math.ceil(float(series_sequence))
+                sequence_ceiling = sequence_number(series_sequence)
+                if sequence_ceiling:
                     fallback_highest_sequences[series_key] = max(
                         fallback_highest_sequences.get(series_key, 0),
                         sequence_ceiling,
@@ -614,3 +637,11 @@ def client_from_config(config: Any, client_factory=AudiobookshelfClient) -> Audi
             refresh_token,
         ),
     )
+
+
+def sequence_number(sequence: str) -> int:
+    """Series numbers are free text in Audiobookshelf ("3", "3.5", "1-2", "Band 4"): use the first number."""
+    match = re.search(r"\d+(?:[.,]\d+)?", str(sequence or ""))
+    if not match:
+        return 0
+    return math.ceil(float(match.group(0).replace(",", ".")))

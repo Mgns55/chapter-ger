@@ -4,6 +4,11 @@ All notable changes to Chapter Player for Audiobookshelf are documented here.
 
 ## Unreleased
 
+## [0.3.22] - 2026-10-27 (Mgns55/chapter-ger)
+
+- Bücherliste: Hörfortschritt wird mit einer einzigen Anfrage geholt statt mit einer pro Buch – die Aktualisierung (jede Minute) ist dadurch viel schneller und bricht nicht mehr ab, wenn einzelne Anfragen scheitern.
+- Serien-Nummern wie "1-2", "3a" oder "Band 4" bringen die Aktualisierung nicht mehr zum Absturz (vorher blieb dann die alte Liste stehen).
+
 ## [0.3.21] - 2026-10-27 (Mgns55/chapter-ger)
 
 - WLAN über die Setup-Seite: Das Netz wird jetzt zuerst dauerhaft gespeichert und erst dann verbunden. Vorher schlug das Verbinden aus dem Einrichtungs-WLAN heraus fehl ("Netz nicht gefunden"), weil der Hotspot nicht scannt – und es wurde nichts gespeichert. Klappt das Verbinden nicht, startet der Hotspot wieder.

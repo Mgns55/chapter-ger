@@ -85,6 +85,15 @@ PI_GUIDE_H, PI_GUIDE_LEG, PI_GUIDE_T = 12.0, 9.0, 2.0
 
 # back panel openings
 USB = (135.0, 105.0)                          # USB-C panel-mount socket (x, z)
+
+# 3.5 mm headphone socket on the top (D-size flange 31 x 26 mm, body ~20 mm, 42 mm deep),
+# behind the knobs above the electronics compartment - not above the sealed speaker chamber
+JACK = (167.0, 82.0)                          # (x, y) on the top
+JACK_CUTOUT_R = 11.25                         # 22.5 mm hole, the flange covers it
+JACK_SCREWS = ((12.0, 9.5), (-12.0, -9.5))    # diagonal M3 holes (D-size pattern 24 x 19 mm)
+
+NAME_TEXT = "Franz Pro"                       # engraved on the bottom
+NAME_CAP = 5.0
 SEG = 64
 
 
@@ -201,9 +210,14 @@ def build_body() -> mf.Manifold:
     body -= union([cyl_y(x, z, FRONT_T + OLED_BOSS_H - 5.0, FRONT_T + OLED_BOSS_H + 1, OLED_PILOT_R, 24)
                    for x, z in OLED_HOLES])
 
-    # "Franz Pro" engraved under the display (0.6 mm)
-    name = text_solid("Franz Pro", cap_size(6.5), 1.6).rotate([90, 0, 0])   # letters in x/z, depth -y
-    body -= name.translate([ox, 0.6, 58.0])
+    # name engraved on the bottom (0.6 mm), readable when the radio is tipped backwards
+    name = text_solid(NAME_TEXT, cap_size(NAME_CAP), 1.6).mirror([0, 1, 0])   # letter "up" = towards the front
+    body -= name.translate([W / 2, BODY_D / 2 + cap_size(NAME_CAP) * 0.36, -1.0])
+
+    # headphone socket on the top
+    jx, jy = JACK
+    body -= cyl_z(jx, jy, H - WALL - 1, H + 1, JACK_CUTOUT_R, 96)
+    body -= union([cyl_z(jx + dx, jy + dy, H - WALL - 1, H + 1, 1.7, 24) for dx, dy in JACK_SCREWS])
 
     # knobs on the top: holes, thinned wall under the nut, engraved labels
     for text, kx in KNOBS:

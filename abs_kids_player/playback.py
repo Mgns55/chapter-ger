@@ -57,6 +57,7 @@ class GStreamerPlayback:
         self.audio_cache: Any | None = None
         self.listening_recorder: Any | None = None   # callable(item_id, title, seconds)
         self.headphones_output = False
+        self.playing_local_file = False
         self.headphone_volume_scale = 1.0              # hearing protection: max level on headphones
 
     def start(self, session: PlaybackSession, client: AudiobookshelfClient) -> None:
@@ -224,6 +225,7 @@ class GStreamerPlayback:
                 uri = track.url
         self.playbin.set_state(self.Gst.State.NULL)
         self.configure_audio_sink()
+        self.playing_local_file = uri.startswith("file:")
         self.playbin.set_property("uri", uri)
         if apply_audio:
             self.apply_audio_state()

@@ -6,6 +6,7 @@ import unittest
 from abs_kids_player.wifi import (
     SETUP_HOTSPOT_SSID,
     active_wifi_connection_name,
+    WifiError,
     connect_wifi,
     current_wifi_ssid,
     ensure_wifi_or_hotspot,
@@ -70,25 +71,59 @@ class WifiTest(unittest.TestCase):
         self.assertFalse(status.connected)
         self.assertEqual(status.message, "Not connected")
 
-    def test_connect_wifi_builds_nmcli_command(self) -> None:
+    def test_connect_wifi_saves_profile_then_leaves_hotspot(self) -> None:
         runner = FakeRunner()
 
-        connect_wifi("Home WiFi", "secret-pass", device="wlan0", runner=runner)
+        connect_wifi("Home WiFi", "secret-pass", device="wlan0", runner=runner, sleep=lambda _s: None)
 
-        self.assertEqual(
-            runner.calls[0],
-            [
-                "nmcli",
-                "device",
-                "wifi",
-                "connect",
-                "Home WiFi",
-                "password",
-                "secret-pass",
-                "ifname",
-                "wlan0",
-            ],
-        )
+        self.assertEqual(runner.calls[0], ["nmcli", "connection", "delete", "id", "Home WiFi"])
+        add = runner.calls[1]
+        self.assertEqual(add[:8], ["nmcli", "connection", "add", "type", "wifi", "ifname", "wlan0", "con-name"])
+        self.assertIn("wpa-psk", add)
+        self.assertEqual(add[add.index("wifi-sec.psk") + 1], "secret-pass")
+        self.assertEqual(add[add.index("connection.autoconnect") + 1], "yes")
+        self.assertIn(["nmcli", "connection", "down", "id", "Chapter-Setup"], runner.calls)
+        self.assertEqual(runner.calls[-1], ["nmcli", "--wait", "40", "connection", "up", "id", "Home WiFi"])
+
+    def test_connect_wifi_restarts_hotspot_when_joining_fails(self) -> None:
+        class FailingUp(FakeRunner):
+            def __call__(self, args):
+                self.calls.append(args)
+                if args[-3:-1] == ["up", "id"]:
+                    raise subprocess.CalledProcessError(4, args, "", "Secrets were required")
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+        runner = FailingUp()
+        with self.assertRaises(WifiError):
+            connect_wifi("Home WiFi", "wrong", device="wlan0", runner=runner, sleep=lambda _s: None)
+        self.assertTrue(any("Chapter-Setup" in call for call in runner.calls[-3:]))
+
+    def test_retry_home_wifi_from_unused_hotspot(self) -> None:
+        from abs_kids_player.wifi import retry_home_wifi_from_hotspot
+
+        class Runner(FakeRunner):
+            def __init__(self, stations=""):
+                super().__init__()
+                self.stations = stations
+
+            def __call__(self, args):
+                self.calls.append(args)
+                out = ""
+                if "ACTIVE,SSID" in args:
+                    out = "yes:Chapter-Setup\n"
+                elif "NAME,TYPE" in args:
+                    out = "Chapter-Setup:802-11-wireless\nZuhause:802-11-wireless\n"
+                elif "DEVICE,TYPE,STATE" in args:
+                    out = "wlan0:wifi:connected\n"
+                elif args[:2] == ["iw", "dev"]:
+                    out = self.stations
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout=out, stderr="")
+
+        busy = Runner(stations="Station aa:bb:cc:dd:ee:ff (on wlan0)")
+        self.assertEqual(retry_home_wifi_from_hotspot(busy), "hotspot-in-use")
+        idle = Runner()
+        self.assertEqual(retry_home_wifi_from_hotspot(idle), "connected:Zuhause")
+        self.assertIn(["nmcli", "--wait", "30", "connection", "up", "id", "Zuhause"], idle.calls)
 
     def test_active_wifi_connection_name_finds_wireless_connection(self) -> None:
         runner = FakeRunner("lo:loopback\nChapter WiFi:802-11-wireless\n")

@@ -68,6 +68,7 @@ from .wifi import (
     connect_wifi,
     ensure_wifi_or_hotspot,
     forget_all_wifi_connections_and_start_hotspot,
+    retry_home_wifi_from_hotspot,
     forget_current_wifi_and_start_hotspot,
     wifi_status,
 )
@@ -2971,7 +2972,28 @@ def main() -> None:
             print(ensure_wifi_or_hotspot(wait_seconds=WIFI_STARTUP_WAIT_SECONDS))
         except WifiError as error:
             print(f"Wi-Fi setup mode could not start: {error}")
+        start_home_wifi_retry_worker()
     run_setup_server()
+
+
+HOME_WIFI_RETRY_SECONDS = 300.0
+
+
+def start_home_wifi_retry_worker(interval: float = HOME_WIFI_RETRY_SECONDS) -> None:
+    """Every few minutes: if the setup hotspot runs unused and a home network is saved, try it again."""
+    def run() -> None:
+        while True:
+            time.sleep(interval)
+            try:
+                result = retry_home_wifi_from_hotspot()
+                if result not in ("not-in-hotspot", "no-saved-network", "hotspot-in-use"):
+                    print(f"Home Wi-Fi retry: {result}", flush=True)
+            except WifiError as error:
+                print(f"Home Wi-Fi retry failed: {error}", flush=True)
+            except Exception as error:   # never let this thread die
+                print(f"Home Wi-Fi retry error: {error}", flush=True)
+
+    threading.Thread(target=run, daemon=True, name="home-wifi-retry").start()
 
 
 if __name__ == "__main__":

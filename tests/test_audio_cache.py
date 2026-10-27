@@ -55,7 +55,7 @@ class AudioCacheTest(unittest.TestCase):
 
         def opener(request, timeout=30):
             self.opened.append(request.full_url)
-            return FakeResponse(b"x" * 1000)
+            return FakeResponse(b"ID3" + b"x" * 997)
 
         self.cache = AudioCache(root=self.root, max_bytes=10**9, min_free_bytes=0, opener=opener, start_delay=0)
 
@@ -120,6 +120,25 @@ class AudioCacheTest(unittest.TestCase):
         self.assertEqual(self.cache.cached_item_ids(), ["new"])
 
 
+class ValidationTest(unittest.TestCase):
+    def test_non_audio_download_is_rejected_and_bad_copies_are_dropped(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        html = b"<!doctype html><html>login</html>"
+        cache = AudioCache(root=Path(tmp.name), max_bytes=10**9, min_free_bytes=0,
+                           opener=lambda r, timeout=30: FakeResponse(html), start_delay=0)
+        session = make_session(paths=("/api/items/li_1/file/1",))
+        cache.remember_session(session)
+        with self.assertRaises(OSError):
+            cache.download_item("li_1", FakeClient())
+        self.assertFalse(cache.is_complete("li_1"))
+        # a broken file that is already on disk is removed on lookup
+        bad = cache.item_dir("li_1") / "track-001.audio"
+        bad.write_bytes(html)
+        self.assertIsNone(cache.local_uri("li_1", session.tracks[0]))
+        self.assertFalse(bad.exists())
+
+
 class PlaybackUsesCacheTest(unittest.TestCase):
     def test_load_current_track_prefers_local_file(self):
         playback = GStreamerPlayback()
@@ -141,7 +160,7 @@ class OfflineFallbackTest(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         cache = AudioCache(root=Path(tmp.name), max_bytes=10**9, min_free_bytes=0,
-                           opener=lambda r, timeout=30: FakeResponse(b"x" * 10), start_delay=0)
+                           opener=lambda r, timeout=30: FakeResponse(b"ID3" + b"x" * 9), start_delay=0)
         cache.remember_session(make_session())
         cache.download_item("li_1", FakeClient())
         playback = Mock()

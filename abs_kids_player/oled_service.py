@@ -790,10 +790,17 @@ def save_playback_state(playback: GStreamerPlayback) -> bool:
 
 
 def poll_playback_safely(playback: GStreamerPlayback) -> DisplayFrame | None:
+    session = getattr(playback, "session", None)
+    local = getattr(playback, "playing_local_file", False) is True
     try:
         playback.poll()
     except PlaybackError as error:
         print(f"Playback poll failed: {error}")
+        cache = getattr(playback, "audio_cache", None)
+        if local and isinstance(cache, AudioCache) and session is not None:
+            # a stored copy that cannot be played is dropped and downloaded again later
+            print(f"Removing the local copy of {session.title}")
+            cache.forget_item(session.library_item_id)
         return TwoLineFrame("Playback stopped", "Check audio")
     return None
 

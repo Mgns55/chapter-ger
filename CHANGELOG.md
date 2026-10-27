@@ -4,6 +4,12 @@ All notable changes to Chapter Player for Audiobookshelf are documented here.
 
 ## Unreleased
 
+## [0.3.21] - 2026-10-27 (Mgns55/chapter-ger)
+
+- WLAN über die Setup-Seite: Das Netz wird jetzt zuerst dauerhaft gespeichert und erst dann verbunden. Vorher schlug das Verbinden aus dem Einrichtungs-WLAN heraus fehl ("Netz nicht gefunden"), weil der Hotspot nicht scannt – und es wurde nichts gespeichert. Klappt das Verbinden nicht, startet der Hotspot wieder.
+- Läuft das Einrichtungs-WLAN ungenutzt und ist ein Heim-WLAN gespeichert, versucht der Player alle 5 Minuten, sich wieder damit zu verbinden (z. B. nach einer Autofahrt).
+- Offline-Speicher: heruntergeladene Dateien werden auf echte Audiodaten geprüft; Kopien, die sich nicht abspielen lassen, werden gelöscht und später neu geladen.
+
 ## [0.3.20] - 2026-10-27 (Mgns55/chapter-ger)
 
 - Kopfhörer: optionale Kopfhörerbuchse an der Klinke des Pi. Umschalten im Schnellmenü (Menü-Knopf 3 s halten), auf der Setup-Seite oder aus Home Assistant; eigene Höchstlautstärke für Kopfhörer, der Verstärker ist dabei aus. Nach dem Neustart immer Lautsprecher.

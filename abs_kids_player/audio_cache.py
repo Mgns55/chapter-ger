@@ -65,6 +65,23 @@ def cacheable(url: str) -> bool:
     return bool(path) and "/hls/" not in path and not path.endswith(".m3u8") and not url.startswith("file:")
 
 
+def looks_like_audio(path: Path) -> bool:
+    """Cheap check of the file header: MP3, MP4/M4A/M4B, FLAC, Ogg/Opus or WAV."""
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(12)
+    except OSError:
+        return False
+    if len(head) < 12:
+        return False
+    return (
+        head[:3] == b"ID3"
+        or (head[0] == 0xFF and head[1] & 0xE0 == 0xE0)
+        or head[4:8] == b"ftyp"
+        or head[:4] in (b"fLaC", b"OggS", b"RIFF")
+    )
+
+
 def track_file_name(track: AudioTrack) -> str:
     return f"track-{track.index:03d}.audio"
 
@@ -164,9 +181,13 @@ class AudioCache:
         if manifest is None or not path.is_file() or path.stat().st_size == 0:
             return None
         expected = {t["file"]: t["content_path"] for t in manifest.get("tracks", [])}
-        if track.url.startswith("file:") or expected.get(path.name) == content_path(track.url):
-            return path
-        return None
+        if not (track.url.startswith("file:") or expected.get(path.name) == content_path(track.url)):
+            return None
+        if not looks_like_audio(path):
+            print(f"Audio cache: {path} is not an audio file - deleting it")
+            path.unlink(missing_ok=True)
+            return None
+        return path
 
     def local_uri(self, item_id: str, track: AudioTrack) -> str | None:
         path = self.local_track_path(item_id, track)
@@ -177,7 +198,12 @@ class AudioCache:
         if not manifest or not manifest.get("tracks"):
             return False
         directory = self.item_dir(item_id)
-        return all((directory / t["file"]).is_file() for t in manifest["tracks"])
+        return all((directory / t["file"]).is_file() and looks_like_audio(directory / t["file"])
+                   for t in manifest["tracks"])
+
+    def forget_item(self, item_id: str) -> None:
+        """Drop a local copy that failed to play; it is downloaded again next time."""
+        shutil.rmtree(self.item_dir(item_id), ignore_errors=True)
 
     def cached_item_ids(self) -> list[str]:
         if not self.root.is_dir():
@@ -332,6 +358,9 @@ class AudioCache:
             if size and part.stat().st_size != size:
                 part.unlink(missing_ok=True)
                 raise OSError(f"incomplete download of track {track['index']}")
+            if not looks_like_audio(part):
+                part.unlink(missing_ok=True)
+                raise OSError(f"track {track['index']} is not an audio file (server returned something else)")
             part.replace(target)
         print(f"Audio cache: {manifest.get('title') or item_id} is stored locally")
         return True

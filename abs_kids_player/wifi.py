@@ -118,17 +118,80 @@ def connect_wifi(
     password: str,
     device: str | None = None,
     runner: CommandRunner = run_command,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> None:
+    """Save the network as a permanent profile, then switch to it.
+
+    `nmcli device wifi connect` only works for networks in the current scan
+    list - and while the setup hotspot runs, the radio does not scan, so the
+    home network was never found and nothing was saved. Instead the profile is
+    created first (it survives reboots even if joining fails right now), the
+    hotspot is stopped, and only then the connection is brought up. If that
+    fails, the hotspot comes back so the setup page stays reachable.
+    """
     ssid = ssid.strip()
     if not ssid:
         raise WifiError("Wi-Fi network name is required.")
 
     device = device or choose_wifi_device(runner)
-    args = ["device", "wifi", "connect", ssid]
+    delete_connection(ssid, runner=runner, missing_ok=True)
+    args = [
+        "connection", "add", "type", "wifi", "ifname", device,
+        "con-name", ssid, "ssid", ssid,
+        "connection.autoconnect", "yes", "connection.autoconnect-priority", "10",
+    ]
     if password:
-        args.extend(["password", password])
-    args.extend(["ifname", device])
+        args.extend(["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password])
     nmcli(args, runner)
+
+    deactivate_connection(SETUP_HOTSPOT_SSID, runner=runner, missing_ok=True)
+    try:
+        nmcli(["device", "wifi", "rescan", "ifname", device], runner)
+    except WifiError:
+        pass
+    sleep(4.0)
+    try:
+        nmcli(["--wait", "40", "connection", "up", "id", ssid], runner)
+    except WifiError as error:
+        try:
+            start_setup_hotspot(device=device, runner=runner)
+        except WifiError:
+            pass
+        raise WifiError(f"Saved {ssid}, but could not join it now: {error}") from error
+
+
+def hotspot_has_clients(device: str = "wlan0", runner: CommandRunner = run_command) -> bool:
+    """True if a phone/laptop is connected to the setup hotspot (unknown counts as yes)."""
+    try:
+        result = runner(["iw", "dev", device, "station", "dump"])
+    except (OSError, subprocess.CalledProcessError):
+        return True
+    return "Station" in (result.stdout or "")
+
+
+def retry_home_wifi_from_hotspot(runner: CommandRunner = run_command) -> str:
+    """While the setup hotspot runs without visitors, try the saved home network again.
+
+    Covers a player that started away from home (e.g. in the car): back home it
+    reconnects by itself instead of staying in setup mode until the next reboot.
+    """
+    if current_wifi_ssid(runner) != SETUP_HOTSPOT_SSID:
+        return "not-in-hotspot"
+    homes = [name for name in saved_wifi_connection_names(runner) if name != SETUP_HOTSPOT_SSID]
+    if not homes:
+        return "no-saved-network"
+    device = choose_wifi_device(runner)
+    if hotspot_has_clients(device, runner):
+        return "hotspot-in-use"
+    deactivate_connection(SETUP_HOTSPOT_SSID, runner=runner, missing_ok=True)
+    for name in homes:
+        try:
+            nmcli(["--wait", "30", "connection", "up", "id", name], runner)
+            return f"connected:{name}"
+        except WifiError:
+            continue
+    start_setup_hotspot(device=device, runner=runner)
+    return "hotspot-restarted"
 
 
 def start_setup_hotspot(

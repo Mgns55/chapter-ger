@@ -61,7 +61,7 @@ class SoftwareUpdateTest(unittest.TestCase):
         self.assertEqual(result.latest_version, "0.3.0")
         self.assertEqual(
             commands,
-            [["git", "ls-remote", "--refs", "--tags", "https://example.test/chapter.git", "v*"]],
+            [["git", "ls-remote", "--refs", "--tags", "https://example.test/chapter.git"]],
         )
 
     def test_check_for_update_returns_a_safe_network_error(self) -> None:
@@ -261,3 +261,11 @@ class SoftwareUpdateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TagWithoutPrefixTest(unittest.TestCase):
+    def test_release_tag_without_v_is_found(self):
+        from abs_kids_player.software_update import latest_release_tag
+        output = "a\trefs/tags/v0.3.21\nb\trefs/tags/0.3.24\nc\trefs/tags/0.3.23\nd\trefs/tags/nightly\n"
+        self.assertEqual(latest_release_tag(output), "0.3.24")
+        self.assertEqual(latest_release_tag(output + "e\trefs/tags/v0.3.24\n"), "v0.3.24")

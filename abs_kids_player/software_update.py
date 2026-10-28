@@ -21,7 +21,7 @@ DEFAULT_INSTALL_USER = "chapter"
 DEFAULT_INSTALL_DIR = "/home/chapter/audiobookshelf-player"
 UPDATE_SERVICE_NAME = "audiobookshelf-player-update.service"
 UPDATE_STATE_FILENAME = "software-update.json"
-RELEASE_TAG_PATTERN = re.compile(r"^refs/tags/v(\d+)\.(\d+)\.(\d+)$")
+RELEASE_TAG_PATTERN = re.compile(r"^refs/tags/(v?)(\d+)\.(\d+)\.(\d+)$")   # "v0.3.24" or "0.3.24"
 VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 UPDATE_CHECK_TIMEOUT_SECONDS = 15
 UPDATE_INSTALL_TIMEOUT_SECONDS = 45 * 60
@@ -36,6 +36,7 @@ class ReleaseCheck:
     latest_version: str = ""
     update_available: bool = False
     error: str = ""
+    latest_tag: str = ""          # the tag name as it exists on GitHub
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,8 @@ def version_tuple(value: str) -> tuple[int, int, int] | None:
 
 
 def latest_release_tag(output: str) -> str:
-    versions: list[tuple[tuple[int, int, int], str]] = []
+    """Highest release tag, with or without the leading "v" (a "v" tag wins a tie)."""
+    versions: list[tuple[tuple[int, int, int], bool, str]] = []
     for line in output.splitlines():
         fields = line.split()
         if len(fields) < 2:
@@ -67,9 +69,10 @@ def latest_release_tag(output: str) -> str:
         match = RELEASE_TAG_PATTERN.fullmatch(fields[1])
         if match is None:
             continue
-        version = tuple(int(part) for part in match.groups())
-        versions.append((version, f"v{'.'.join(match.groups())}"))
-    return max(versions)[1] if versions else ""
+        prefix, *numbers = match.groups()
+        version = tuple(int(part) for part in numbers)
+        versions.append((version, prefix == "v", fields[1].removeprefix("refs/tags/")))
+    return max(versions)[2] if versions else ""
 
 
 def check_for_update(
@@ -83,7 +86,7 @@ def check_for_update(
         return ReleaseCheck(current_version=current_version, error="Invalid installed version.")
     try:
         result = runner(
-            ["git", "ls-remote", "--refs", "--tags", repo_url, "v*"],
+            ["git", "ls-remote", "--refs", "--tags", repo_url],
             timeout=UPDATE_CHECK_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
@@ -102,6 +105,7 @@ def check_for_update(
         current_version=current_version,
         latest_version=latest_tag.removeprefix("v"),
         update_available=latest > current,
+        latest_tag=latest_tag,
     )
 
 
@@ -280,7 +284,7 @@ def install_latest_release(
         )
         return release.current_version
 
-    target_tag = f"v{release.latest_version}"
+    target_tag = release.latest_tag or f"v{release.latest_version}"
     save_update_state(
         SoftwareUpdateState(
             phase="installing",

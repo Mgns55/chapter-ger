@@ -32,7 +32,14 @@ DEFAULT_CACHE_DIR = Path.home() / ".cache" / "chapter" / "audio"
 DEFAULT_MAX_GB = 40.0
 MIN_FREE_BYTES = 2 * 1024**3
 DOWNLOAD_START_DELAY_SECONDS = 10.0
-CHUNK_BYTES = 1024 * 1024
+CHUNK_BYTES = 64 * 1024
+# The Pi 3A+ has one slow 2.4 GHz radio and a slow SD card. A full-speed download
+# next to a running stream starves the stream (stutter) and piles up unwritten
+# data in RAM that is then flushed in one long burst (the whole device freezes).
+# So: limit the rate, flush to the card every few MB and keep the thread low priority.
+STREAMING_RATE_BYTES = 192 * 1024        # while a book streams from the server
+IDLE_RATE_BYTES = 1536 * 1024            # while paused or playing a local copy
+SYNC_EVERY_BYTES = 4 * 1024 * 1024
 MANIFEST = "manifest.json"
 OFFLINE_SESSION_PREFIX = "offline-"
 
@@ -106,6 +113,8 @@ class AudioCache:
         self._jobs: queue.SimpleQueue[tuple[str, Any]] = queue.SimpleQueue()
         self._worker: threading.Thread | None = None
         self.active_item_id = ""
+        self.stream_busy: Callable[[], bool] = lambda: False   # set by the player
+        self.status = "idle"
         self.user = ""          # Audiobookshelf user (profile) whose position is tracked
 
     @property
@@ -323,7 +332,18 @@ class AudioCache:
                 self._worker = threading.Thread(target=self._run, daemon=True, name="audio-cache")
                 self._worker.start()
 
+    def rate_limit(self) -> int:
+        try:
+            busy = bool(self.stream_busy())
+        except Exception:
+            busy = False
+        return STREAMING_RATE_BYTES if busy else IDLE_RATE_BYTES
+
     def _run(self) -> None:
+        try:   # Linux: nice value per thread; keeps the display and audio responsive
+            os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), 15)
+        except (AttributeError, OSError):
+            pass
         while True:
             item_id, client = self._jobs.get()
             time.sleep(self.start_delay)
@@ -344,17 +364,19 @@ class AudioCache:
                 continue
             url = client.authenticated_media_url(track["content_path"])
             part = target.with_suffix(".part")
+            started = time.monotonic()
             with self.opener(Request(url), timeout=30) as response:
                 size = int(response.headers.get("Content-Length") or 0)
                 if not self.make_room(size, keep={item_id, self.active_item_id}):
                     print("Audio cache: not enough space, skipping download")
                     return False
-                with part.open("wb") as handle:
-                    while True:
-                        chunk = response.read(CHUNK_BYTES)
-                        if not chunk:
-                            break
-                        handle.write(chunk)
+                self.status = f"downloading {item_id} track {track['index']}"
+                print(f"Audio cache: downloading track {track['index']}/{len(manifest['tracks'])}"
+                      f" of {manifest.get('title') or item_id} ({size // 1024 // 1024} MB)")
+                self._copy_throttled(response, part)
+            elapsed = max(time.monotonic() - started, 0.001)
+            print(f"Audio cache: track {track['index']} done in {elapsed:.0f} s"
+                  f" ({part.stat().st_size / elapsed / 1024:.0f} KB/s)")
             if size and part.stat().st_size != size:
                 part.unlink(missing_ok=True)
                 raise OSError(f"incomplete download of track {track['index']}")
@@ -362,8 +384,43 @@ class AudioCache:
                 part.unlink(missing_ok=True)
                 raise OSError(f"track {track['index']} is not an audio file (server returned something else)")
             part.replace(target)
+        self.status = "idle"
         print(f"Audio cache: {manifest.get('title') or item_id} is stored locally")
         return True
+
+    def _copy_throttled(self, response: Any, part: Path) -> None:
+        window_start = time.monotonic()
+        window_bytes = 0
+        unsynced = 0
+        with part.open("wb") as handle:
+            while True:
+                chunk = response.read(CHUNK_BYTES)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                window_bytes += len(chunk)
+                unsynced += len(chunk)
+                if unsynced >= SYNC_EVERY_BYTES:
+                    flush_to_card(handle)
+                    unsynced = 0
+                rate = self.rate_limit()
+                ahead = window_bytes / rate - (time.monotonic() - window_start)
+                if ahead > 0:
+                    time.sleep(ahead)
+                if time.monotonic() - window_start > 5:     # adapt quickly when playback changes
+                    window_start, window_bytes = time.monotonic(), 0
+            flush_to_card(handle)
+
+
+def flush_to_card(handle: Any) -> None:
+    """Write buffered data to the SD card now and drop it from RAM (small, regular writes)."""
+    try:
+        handle.flush()
+        os.fdatasync(handle.fileno())
+        if hasattr(os, "posix_fadvise"):
+            os.posix_fadvise(handle.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+    except OSError:
+        pass
 
 
 class OfflineProgressClient:

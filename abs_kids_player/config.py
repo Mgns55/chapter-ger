@@ -89,6 +89,7 @@ class AppConfig:
     mqtt_password: str = ""
     headphones_enabled: bool = False                 # a headphone socket is wired to the Pi's jack
     headphone_max_percent: int = DEFAULT_HEADPHONE_MAX_PERCENT
+    screen_saver_word: str = ""                      # empty = device name (hostname), e.g. "Franz"
 
     @property
     def is_ready(self) -> bool:
@@ -134,6 +135,7 @@ def load_config() -> AppConfig:
         mqtt_password=str(data.get("mqtt_password", "")),
         headphones_enabled=bool(data.get("headphones_enabled", False)),
         headphone_max_percent=valid_headphone_max_percent(data.get("headphone_max_percent")),
+        screen_saver_word=valid_screen_saver_word(data.get("screen_saver_word")),
     )
 
 
@@ -211,6 +213,24 @@ def valid_playback_speed(value: object) -> float:
     except (TypeError, ValueError):
         return DEFAULT_PLAYBACK_SPEED
     return speed if speed in PLAYBACK_SPEEDS else DEFAULT_PLAYBACK_SPEED
+
+
+def valid_screen_saver_word(value: object) -> str:
+    return " ".join(str(value or "").split())[:16]
+
+
+def default_screen_saver_word() -> str:
+    """The device name, e.g. hostname "franz" -> "Franz"; generic names fall back to "chapter"."""
+    import socket
+
+    name = socket.gethostname().split(".")[0].strip()
+    if not name or name.lower() in {"raspberrypi", "localhost", "chapter"}:
+        return "chapter"
+    return name[:1].upper() + name[1:]
+
+
+def screen_saver_word(config: "AppConfig") -> str:
+    return config.screen_saver_word or default_screen_saver_word()
 
 
 def valid_screen_saver_dim_percent(value: object) -> int:

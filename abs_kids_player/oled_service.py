@@ -3,15 +3,17 @@ from __future__ import annotations
 import argparse
 import faulthandler
 import math
+import os
 import queue
 import signal
+import subprocess
 import threading
 import time
 import traceback
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from .api import AudiobookshelfClient, AudiobookshelfError, client_from_config
 from .audio_cache import AudioCache, OfflineProgressClient, shared_cache
@@ -48,6 +50,7 @@ from .bluetooth_audio import (
 )
 from .config import (
     DEFAULT_SCREEN_SAVER_DIM_PERCENT,
+    screen_saver_word,
     LIBRARY_SORT_AUTHOR,
     LIBRARY_SORT_TITLE,
     SCREEN_SAVER_BOOKS,
@@ -109,6 +112,8 @@ DEFAULT_TITLE_SCROLL_LOOP_PAUSE_SECONDS = 2.0
 DEFAULT_VOLUME_OVERLAY_SECONDS = 3.0
 DEFAULT_IP_OVERLAY_SECONDS = 5.0
 DEFAULT_SCREEN_SAVER_IDLE_SECONDS = 300.0
+LOOP_STALL_WARN_SECONDS = 2.0
+HEALTH_LOG_SECONDS = 300.0
 DEFAULT_SCREEN_SAVER_FRAMES_PER_SECOND = 8.0
 DEFAULT_UNMUTE_VOLUME_PERCENT = 10
 DEFAULT_BOOT_SPLASH_HANDOFF_PATH = "/tmp/audiobookshelf-player-oled-starting"
@@ -616,6 +621,7 @@ def screen_saver_frame(
     return ScreenSaverFrame(
         frame_index=int(elapsed * frames_per_second),
         mode=SCREEN_SAVER_CHAPTER,
+        words=words or ("chapter",),
         brightness_percent=brightness_percent,
     )
 
@@ -625,11 +631,11 @@ def clock_screen_saver_text(now: datetime | None = None) -> str:
     return current.strftime("%I:%M %p").lstrip("0")
 
 
-def screen_saver_words_for_mode(mode: str, books: list[Book]) -> tuple[str, ...]:
+def screen_saver_words_for_mode(mode: str, books: list[Book], word: str = "chapter") -> tuple[str, ...]:
     if mode == SCREEN_SAVER_BOOKS:
         titles = tuple(book.display_title for book in books if book.display_title)
-        return titles or ("chapter",)
-    return ("chapter",)
+        return titles or (word,)
+    return (word,)
 
 
 def update_display_brightness(display, percent: int, current_percent: int) -> int:
@@ -1084,6 +1090,7 @@ def run_oled_service(
         paused_for_mute = False
         last_playback_volume_state: tuple[int, bool] | None = None
         last_playback_state_save = 0.0
+        last_health_log = time.monotonic() - HEALTH_LOG_SECONDS + 60
         boot_chime_played = False
         while not shutdown.requested:
             try:
@@ -1091,6 +1098,11 @@ def run_oled_service(
                 full_loop_elapsed = max(0.0, now - last_loop_at)
                 loop_elapsed = min(full_loop_elapsed, 1.0)
                 last_loop_at = now
+                if full_loop_elapsed >= LOOP_STALL_WARN_SECONDS:
+                    print(f"Health: display loop stalled for {full_loop_elapsed:.1f} s")
+                if now - last_health_log >= HEALTH_LOG_SECONDS:
+                    last_health_log = now
+                    log_health(playback)
                 if now - last_software_update_load >= DEFAULT_SOFTWARE_UPDATE_REFRESH_SECONDS:
                     software_update_state = load_update_state()
                     software_update_active = update_state_is_active(software_update_state)
@@ -1696,7 +1708,9 @@ def run_oled_service(
                         screen_saver_started_at,
                         screen_saver_frames_per_second,
                         mode=screen_saver_mode,
-                        words=screen_saver_words_for_mode(screen_saver_mode, menu.books),
+                        words=screen_saver_words_for_mode(
+                            screen_saver_mode, menu.books, screen_saver_word(runtime_config)
+                        ),
                         brightness_percent=runtime_config.screen_saver_dim_percent,
                     )
                 display_brightness_percent = update_display_brightness(
@@ -2158,6 +2172,7 @@ def play_book_command_result(command: MenuCommand, playback: GStreamerPlayback) 
         cache = cache if isinstance(cache, AudioCache) else None
         if cache is not None:
             cache.user = config.username
+            cache.stream_busy = lambda: bool(playback.is_playing and not playback.playing_local_file)
         try:
             session = client.start_playback(
                 command.book_id,
@@ -2238,6 +2253,50 @@ def handle_input_events_with_fallback(
                 frame = VolumeFrame(fallback_percent, muted=fallback_muted or fallback_percent <= 0)
             elif event.name == "show_ip":
                 frame = setup_address_frame()
+
+
+def health_snapshot(playback: Any = None) -> str:
+    """One log line with the numbers that explain stutter and freezes on a small Pi."""
+    parts = []
+    try:
+        parts.append("load " + " ".join(f"{v:.2f}" for v in os.getloadavg()))
+    except OSError:
+        pass
+    try:
+        meminfo = {}
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            key, _, value = line.partition(":")
+            meminfo[key] = int(value.split()[0]) // 1024
+        parts.append(f"mem free {meminfo.get('MemAvailable', 0)} MB, dirty {meminfo.get('Dirty', 0)} MB,"
+                     f" swap used {meminfo.get('SwapTotal', 0) - meminfo.get('SwapFree', 0)} MB")
+    except (OSError, ValueError):
+        pass
+    try:
+        temp = int(Path("/sys/class/thermal/thermal_zone0/temp").read_text()) / 1000
+        parts.append(f"cpu {temp:.0f} C")
+    except (OSError, ValueError):
+        pass
+    try:
+        throttled = subprocess.run(["vcgencmd", "get_throttled"], capture_output=True, text=True, timeout=2)
+        value = throttled.stdout.strip().partition("=")[2]
+        if value:
+            parts.append(f"throttled {value}" + (" (UNDER-VOLTAGE)" if int(value, 16) & 0x50005 else ""))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    cache = getattr(playback, "audio_cache", None)
+    if isinstance(cache, AudioCache):
+        parts.append(f"cache {cache.status}")
+    if playback is not None and getattr(playback, "session", None) is not None:
+        source = "local" if getattr(playback, "playing_local_file", False) else "stream"
+        parts.append(f"playing {source}" if getattr(playback, "is_playing", False) else "paused")
+    return "; ".join(parts)
+
+
+def log_health(playback: Any = None) -> None:
+    try:
+        print("Health: " + health_snapshot(playback))
+    except Exception as error:
+        print(f"Health: snapshot failed: {error}")
 
 
 def sleep_until_shutdown(shutdown: Shutdown, seconds: float) -> None:

@@ -325,3 +325,20 @@ class HeadphoneTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScreenSaverNameTest(unittest.TestCase):
+    def test_device_name_is_the_default_word(self):
+        from abs_kids_player import config as cfg
+        from abs_kids_player.oled_service import screen_saver_frame, screen_saver_words_for_mode
+        with patch("socket.gethostname", return_value="franz"):
+            self.assertEqual(cfg.screen_saver_word(cfg.AppConfig()), "Franz")
+        with patch("socket.gethostname", return_value="raspberrypi"):
+            self.assertEqual(cfg.screen_saver_word(cfg.AppConfig()), "chapter")
+        self.assertEqual(cfg.screen_saver_word(cfg.AppConfig(screen_saver_word="Ida")), "Ida")
+        words = screen_saver_words_for_mode("chapter", [], "Franz")
+        self.assertEqual(screen_saver_frame(10, 0, words=words).words, ("Franz",))
+
+    def test_health_snapshot_never_raises(self):
+        from abs_kids_player.oled_service import health_snapshot
+        self.assertIsInstance(health_snapshot(None), str)

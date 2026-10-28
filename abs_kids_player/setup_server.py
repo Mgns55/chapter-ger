@@ -47,6 +47,8 @@ from .config import (
     valid_playback_speed,
     valid_screen_saver_dim_percent,
     valid_screen_saver_mode,
+    valid_screen_saver_word,
+    default_screen_saver_word,
     valid_sleep_timer_minutes,
 )
 from .library_cache import clear_cached_books
@@ -1569,6 +1571,9 @@ class SetupHandler(BaseHTTPRequestHandler):
         if fields is None:
             return
         mode = valid_screen_saver_mode(one(fields, "screen_saver_mode"))
+        if "screen_saver_word" in fields:
+            config = load_config()
+            save_config(replace(config, screen_saver_word=valid_screen_saver_word(one(fields, "screen_saver_word"))))
         if "screen_saver_dim_percent" in fields:
             save_screen_saver_setting(
                 mode,
@@ -2387,6 +2392,10 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
               </select>
             </label>
             <label>
+              Name
+              <input class="settings-select" name="screen_saver_word" maxlength="16" value="{screen_saver_word}" placeholder="{screen_saver_word_default}" aria-label="Screen saver name">
+            </label>
+            <label>
               Dim level
               <select class="settings-select" name="screen_saver_dim_percent" aria-label="Screen saver dim level">
                 {screen_saver_dim_options}
@@ -2427,6 +2436,8 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         playback_speed_options=render_playback_speed_options(config.playback_speed),
         screen_saver_options=render_screen_saver_options(config.screen_saver_mode),
         screen_saver_dim_options=render_screen_saver_dim_options(config.screen_saver_dim_percent),
+        screen_saver_word=html.escape(config.screen_saver_word, quote=True),
+        screen_saver_word_default=html.escape(default_screen_saver_word(), quote=True),
         sleep_next_value=sleep_next_value,
         sleep_toggle_class=sleep_toggle_class,
         sleep_aria_pressed=sleep_aria_pressed,
@@ -2712,7 +2723,7 @@ def podcast_metadata_label(podcast: PodcastConfig) -> str:
 
 def render_screen_saver_options(selected_mode: str) -> str:
     options = (
-        (SCREEN_SAVER_CHAPTER, "Chapter word"),
+        (SCREEN_SAVER_CHAPTER, "Device name"),
         (SCREEN_SAVER_BOOKS, "Book titles"),
         (SCREEN_SAVER_CLOCK, "Digital clock"),
     )

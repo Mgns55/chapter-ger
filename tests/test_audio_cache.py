@@ -139,6 +139,34 @@ class ValidationTest(unittest.TestCase):
         self.assertFalse(bad.exists())
 
 
+class GentleDownloadTest(unittest.TestCase):
+    def test_rate_is_lower_while_streaming(self):
+        from abs_kids_player import audio_cache
+        cache = AudioCache(root=Path("/nonexistent"), max_bytes=1, min_free_bytes=0, start_delay=0)
+        self.assertEqual(cache.rate_limit(), audio_cache.IDLE_RATE_BYTES)
+        cache.stream_busy = lambda: True
+        self.assertEqual(cache.rate_limit(), audio_cache.STREAMING_RATE_BYTES)
+        cache.stream_busy = lambda: 1 / 0          # a broken hook never stops downloads
+        self.assertEqual(cache.rate_limit(), audio_cache.IDLE_RATE_BYTES)
+
+    def test_download_is_paced_and_flushed(self):
+        from abs_kids_player import audio_cache
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        data = b"ID3" + b"x" * (300 * 1024)
+        cache = AudioCache(root=Path(tmp.name), max_bytes=10**9, min_free_bytes=0,
+                           opener=lambda r, timeout=30: FakeResponse(data), start_delay=0)
+        cache.remember_session(make_session(paths=("/api/items/li_1/file/1",)))
+        sleeps = []
+        with patch.object(audio_cache, "IDLE_RATE_BYTES", 100 * 1024), \
+                patch.object(audio_cache.time, "sleep", side_effect=sleeps.append), \
+                patch.object(audio_cache, "flush_to_card") as flush:
+            self.assertTrue(cache.download_item("li_1", FakeClient()))
+        self.assertGreater(sum(sleeps), 2.0)        # ~300 KB at 100 KB/s
+        flush.assert_called()
+        self.assertEqual(cache.status, "idle")
+
+
 class PlaybackUsesCacheTest(unittest.TestCase):
     def test_load_current_track_prefers_local_file(self):
         playback = GStreamerPlayback()

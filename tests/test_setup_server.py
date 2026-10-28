@@ -274,7 +274,7 @@ class SetupServerTest(unittest.TestCase):
         self.assertIn('action="/settings/screensaver"', enabled)
         self.assertIn('aria-label="Screen saver dim level"', enabled)
         self.assertIn('<option value="15" selected>15%</option>', enabled)
-        self.assertIn('<option value="chapter" selected>Chapter word</option>', enabled)
+        self.assertIn('<option value="chapter" selected>Device name</option>', enabled)
 
         clock = render_settings_card(AppConfig(screen_saver_mode=SCREEN_SAVER_CLOCK, screen_saver_dim_percent=10))
         self.assertIn('<option value="clock" selected>Digital clock</option>', clock)

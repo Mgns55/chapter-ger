@@ -291,17 +291,17 @@ class HeadphoneTest(unittest.TestCase):
         self.assertEqual(menu.profile_options, ["Back", "Output: Speaker", "Mika", "Janne"])
 
     def test_playback_caps_headphone_volume(self):
-        from abs_kids_player.playback import GStreamerPlayback
+        from abs_kids_player.playback import GStreamerPlayback, volume_amplitude
 
         playback = GStreamerPlayback()
         playback.volume_percent = 80
         with patch("abs_kids_player.playback.set_headphone_mixer_level") as mixer:
             playback.set_headphones_output(True, 50)
         mixer.assert_called_once()
-        self.assertAlmostEqual(playback.target_effective_volume(), 0.4)
+        self.assertAlmostEqual(playback.target_effective_volume(), volume_amplitude(80) * 0.5)
         self.assertEqual(playback.audio_output_device, "headphones")
         playback.set_headphones_output(False)
-        self.assertAlmostEqual(playback.target_effective_volume(), 0.8)
+        self.assertAlmostEqual(playback.target_effective_volume(), volume_amplitude(80))
         self.assertEqual(playback.audio_output_device, "")
 
     def test_speech_follows_limit(self):
@@ -366,3 +366,15 @@ class VolumeFollowsKnobTest(unittest.TestCase):
         elapsed = real_time.monotonic() - started
         self.assertLess(elapsed, 3 * VOLUME_FADE_SECONDS)    # used to be ~10 fades in a row
         self.assertAlmostEqual(playback._effective_volume, playback.target_effective_volume())
+
+
+class VolumeCurveTest(unittest.TestCase):
+    def test_knob_steps_are_even_in_decibels(self):
+        import math
+        from abs_kids_player.playback import volume_amplitude
+        self.assertEqual(volume_amplitude(0), 0.0)
+        self.assertAlmostEqual(volume_amplitude(100), 1.0)
+        self.assertLess(20 * math.log10(volume_amplitude(5)), -40)      # quiet enough to fall asleep
+        steps = [20 * math.log10(volume_amplitude(p)) for p in range(5, 101, 5)]
+        diffs = {round(b - a, 6) for a, b in zip(steps, steps[1:])}
+        self.assertEqual(len(diffs), 1)

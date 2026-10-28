@@ -17,6 +17,10 @@ VOLUME_FADE_STEPS = 16
 PREROLL_VOLUME_FLOOR = 0.001
 SILENCE_VOLUME = 0.0
 MAX_EFFECTIVE_VOLUME = 1.0
+# The ear hears loudness logarithmically. A linear knob makes the lowest steps far too loud
+# (5 % was only -26 dB) and the top steps barely different. The knob therefore moves in
+# equal decibel steps: 100 % = full volume, 5 % = -43 dB, which suits falling asleep.
+VOLUME_RANGE_DB = 45.0
 SPOKEN_NAVIGATION_DUCK_FACTOR = 0.18
 PLAY_START_SETTLE_SECONDS = 0.20
 RESUME_SETTLE_SECONDS = 0.20
@@ -530,7 +534,7 @@ class GStreamerPlayback:
     def target_effective_volume(self) -> float:
         if self.muted or self.soft_paused:
             return SILENCE_VOLUME
-        target = (self.volume_percent / 100) * MAX_EFFECTIVE_VOLUME
+        target = volume_amplitude(self.volume_percent) * MAX_EFFECTIVE_VOLUME
         if self.headphones_output:
             target *= self.headphone_volume_scale
         if self.spoken_navigation_ducked:
@@ -555,6 +559,14 @@ class GStreamerPlayback:
                 return
             time.sleep(delay)
         self._effective_volume = target
+
+
+def volume_amplitude(percent: float, range_db: float = VOLUME_RANGE_DB) -> float:
+    """Knob position (0-100 %) to a linear amplitude factor with equal-sounding steps."""
+    if percent <= 0:
+        return 0.0
+    percent = min(float(percent), 100.0)
+    return 10 ** (-range_db * (1 - percent / 100) / 20)
 
 
 def set_headphone_mixer_level() -> None:

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from abs_kids_player.playback import (
     GStreamerPlayback,
+    volume_amplitude,
     PREROLL_VOLUME_FLOOR,
     SILENCE_VOLUME,
     SPOKEN_NAVIGATION_DUCK_FACTOR,
@@ -251,7 +252,7 @@ class PlaybackTest(unittest.TestCase):
 
         self.assertEqual(playback.volume_percent, 75)
         self.assertFalse(playback.muted)
-        self.assertAlmostEqual(playback.playbin.properties["volume"], 0.75)
+        self.assertAlmostEqual(playback.playbin.properties["volume"], volume_amplitude(75))
         self.assertNotIn("mute", playback.playbin.properties)
 
     def test_spoken_navigation_temporarily_ducks_and_restores_playback(self) -> None:
@@ -264,8 +265,8 @@ class PlaybackTest(unittest.TestCase):
             ducked_volume = playback.playbin.properties["volume"]
             playback.set_spoken_navigation_ducked(False)
 
-        self.assertAlmostEqual(ducked_volume, 0.75 * SPOKEN_NAVIGATION_DUCK_FACTOR)
-        self.assertAlmostEqual(playback.playbin.properties["volume"], 0.75)
+        self.assertAlmostEqual(ducked_volume, volume_amplitude(75) * SPOKEN_NAVIGATION_DUCK_FACTOR)
+        self.assertAlmostEqual(playback.playbin.properties["volume"], volume_amplitude(75))
 
     def test_muted_volume_sets_effective_gstreamer_volume_to_zero(self) -> None:
         playback = GStreamerPlayback()
@@ -293,7 +294,7 @@ class PlaybackTest(unittest.TestCase):
 
         playback.set_volume_state(40, muted=False)
 
-        self.assertAlmostEqual(playback.playbin.properties["volume"], 0.4)
+        self.assertAlmostEqual(playback.playbin.properties["volume"], volume_amplitude(40))
         self.assertNotIn("mute", playback.playbin.properties)
 
     def test_mute_pause_can_skip_progress_sync(self) -> None:
@@ -361,7 +362,7 @@ class PlaybackTest(unittest.TestCase):
         self.assertFalse(playback.soft_paused)
         self.assertEqual(playback.current_time, 39)
         self.assertEqual(playback.playbin.seeks[-1], (FakeGst.Format.TIME, 3, 39))
-        self.assertAlmostEqual(playback.playbin.properties["volume"], 0.5)
+        self.assertAlmostEqual(playback.playbin.properties["volume"], volume_amplitude(50))
 
     def test_soft_pause_resume_does_not_rewind_after_short_pause(self) -> None:
         playback = GStreamerPlayback()
@@ -406,7 +407,7 @@ class PlaybackTest(unittest.TestCase):
 
         self.assertEqual(playback.playbin.volume_values[0], PREROLL_VOLUME_FLOOR)
         self.assertEqual(playback.playbin.states[-1], FakeGst.State.PLAYING)
-        self.assertAlmostEqual(playback.playbin.volume_values[-1], 0.5)
+        self.assertAlmostEqual(playback.playbin.volume_values[-1], volume_amplitude(50))
         self.assertFalse(playback.muted)
 
     def test_soft_pause_fades_volume_down_to_true_silence(self) -> None:

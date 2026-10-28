@@ -51,6 +51,7 @@ class GStreamerPlayback:
         self._sync_in_flight = False
         self._audio_lock = threading.Lock()
         self._effective_volume = 0.5
+        self._volume_requests = 0      # bumped on every change; a running fade stops for a newer one
         self.bluetooth_output_enabled = False
         self.audio_output_device = ""
         self.playback_rate = 1.0
@@ -511,11 +512,13 @@ class GStreamerPlayback:
     def apply_audio_state(self) -> None:
         if self.playbin is None:
             return
-        target = self.target_effective_volume()
+        self._volume_requests += 1
         with self._audio_lock:
             if self.playbin is None:
                 return
-            self.fade_volume(target)
+            # Read the target only now: turning the knob quickly queues several calls,
+            # and each of them must go to the newest volume instead of replaying old steps.
+            self.fade_volume(self.target_effective_volume())
 
     def set_output_volume(self, value: float) -> None:
         if self.playbin is None:
@@ -543,9 +546,13 @@ class GStreamerPlayback:
             return
 
         delay = VOLUME_FADE_SECONDS / VOLUME_FADE_STEPS
+        request = self._volume_requests
         for step in range(1, VOLUME_FADE_STEPS + 1):
             value = start + (target - start) * (step / VOLUME_FADE_STEPS)
             self.playbin.set_property("volume", value)
+            self._effective_volume = value
+            if self._volume_requests != request:     # a newer volume is waiting: continue from here
+                return
             time.sleep(delay)
         self._effective_volume = target
 

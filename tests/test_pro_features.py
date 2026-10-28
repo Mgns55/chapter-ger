@@ -342,3 +342,27 @@ class ScreenSaverNameTest(unittest.TestCase):
     def test_health_snapshot_never_raises(self):
         from abs_kids_player.oled_service import health_snapshot
         self.assertIsInstance(health_snapshot(None), str)
+
+
+class VolumeFollowsKnobTest(unittest.TestCase):
+    def test_quick_knob_turns_do_not_queue_up(self):
+        import threading
+        import time as real_time
+        from unittest.mock import Mock
+        from abs_kids_player.playback import GStreamerPlayback, VOLUME_FADE_SECONDS
+        playback = GStreamerPlayback()
+        playback.playbin = Mock()
+        playback._effective_volume = 0.0
+        started = real_time.monotonic()
+        threads = []
+        for percent in range(10, 101, 10):          # ten clicks, each in its own thread like the UI
+            playback.volume_percent = percent
+            playback.muted = False
+            thread = threading.Thread(target=playback.apply_audio_state)
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
+        elapsed = real_time.monotonic() - started
+        self.assertLess(elapsed, 3 * VOLUME_FADE_SECONDS)    # used to be ~10 fades in a row
+        self.assertAlmostEqual(playback._effective_volume, playback.target_effective_volume())

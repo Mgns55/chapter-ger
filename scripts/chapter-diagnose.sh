@@ -30,7 +30,7 @@ run() { printf '$ %s\n' "$*"; "$@" 2>&1; }
   section "Memory and disk"
   run free -m
   run swapon --show
-  run df -h / "$CACHE_DIR"
+  run df -h /
   grep -E "Dirty|Writeback" /proc/meminfo
   run cat /proc/sys/vm/dirty_ratio /proc/sys/vm/dirty_background_ratio
   echo "Offline books: $(sudo find "$CACHE_DIR" -name manifest.json 2>/dev/null | wc -l)"
@@ -64,16 +64,19 @@ run() { printf '$ %s\n' "$*"; "$@" 2>&1; }
       | tail -n 40
   done
 
-  section "Player log, important lines (last 12 h)"
-  journalctl -u audiobookshelf-player-oled --since "-12h" --no-pager -o short-iso 2>/dev/null \
-    | grep -E "Health|stalled|Audio cache|Playback|playback|Could not|failed|Failed|Error|error|Traceback|Exception|underrun|Offline|offline|Stack|Thread|File \"" \
-    | tail -n 300
+  section "Desktop (not needed for the player, costs RAM and CPU)"
+  echo "default target: $(systemctl get-default)"
+  pgrep -l -x 'labwc|wayfire|lxsession|pcmanfm' || echo "no desktop running"
 
-  section "Player log, previous boot (last 150 lines before the freeze)"
-  journalctl -u audiobookshelf-player-oled -b -1 --no-pager -o short-iso 2>/dev/null | tail -n 150
+  LOG=/home/chapter/audiobookshelf-player-oled.log
+  section "Player log, important lines"
+  sudo grep -aE "Health|stalled|Audio cache|Playback|playback|Could not|failed|Failed|Error|error|Traceback|Exception|underrun|Offline|offline|Stack|Thread|File \"" "$LOG" 2>/dev/null | tail -n 300
 
-  section "Player log, last 120 lines"
-  journalctl -u audiobookshelf-player-oled --no-pager -o short-iso -n 120 2>/dev/null
+  section "Player log, last 150 lines"
+  sudo tail -n 150 "$LOG" 2>/dev/null
+
+  section "Service events"
+  journalctl -u audiobookshelf-player-oled --since "-24h" --no-pager -o short-iso 2>/dev/null | tail -n 40
 } > "$OUT" 2>&1
 
 # Keep logs across reboots from now on (needed to see what happened right before a freeze).

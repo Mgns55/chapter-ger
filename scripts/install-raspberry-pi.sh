@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_URL="${CHAPTER_REPO_URL:-https://github.com/Mgns55/chapter-ger.git}"
-RELEASE_REF="${CHAPTER_RELEASE_REF:-v0.3.23}"
+RELEASE_REF="${CHAPTER_RELEASE_REF:-v0.3.24}"
 INSTALL_USER="${CHAPTER_INSTALL_USER:-chapter}"
 INSTALL_DIR="${CHAPTER_INSTALL_DIR:-}"
 ASSUME_YES=0
@@ -371,6 +371,7 @@ install_services() {
   sudo_run install -m 0644 "${tmpdir}/audiobookshelf-player-update.service" /etc/systemd/system/
   sudo_run install -m 0644 "${tmpdir}/audiobookshelf-player-mqtt.service" /etc/systemd/system/
   install_power_sudoers
+  install_log_rotation
   sudo_run install -m 0755 "${deploy_dir}/audiobookshelf-player-port80-proxy" /usr/local/sbin/audiobookshelf-player-port80-proxy
   sudo_run install -m 0644 "${deploy_dir}/audiobookshelf-player-port80-forward.service" /etc/systemd/system/
 
@@ -395,6 +396,24 @@ install_power_sudoers() {
     return
   fi
   sudo_run install -m 0440 "$tmp" /etc/sudoers.d/chapter-power
+  rm -f "$tmp"
+}
+
+install_log_rotation() {
+  # The player logs to files in the user's home; keep them small on the SD card.
+  local tmp
+  tmp="$(mktemp)"
+  cat >"$tmp" <<EOF_ROTATE
+/home/${INSTALL_USER}/audiobookshelf-player-*.log {
+  size 2M
+  rotate 3
+  compress
+  missingok
+  notifempty
+  copytruncate
+}
+EOF_ROTATE
+  sudo_run install -m 0644 "$tmp" /etc/logrotate.d/chapter-player
   rm -f "$tmp"
 }
 

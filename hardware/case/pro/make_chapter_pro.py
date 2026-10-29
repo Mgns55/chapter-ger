@@ -109,8 +109,9 @@ JACK_PAD_R, JACK_PAD_H = 4.5, 7.0             # pads stick 7 mm into the case, M
 JACK_CLAMP_RIM_H = 7.0                        # clamp rim reaches from the pad tops to the flange
 
 # MAX98357A breakout: two M2.5 domes like the original Chapter case (holes 13.2 mm apart),
-# on the electronics side of the divider, next to the speaker cable hole
-AMP_DOMES = ((63.4, 32.0), (76.6, 32.0))      # (y, z)
+# on the electronics side of the divider, near the front and the speaker cable hole
+# Close to the front: the case prints front-down, so low domes need (almost) no support.
+AMP_DOMES = ((14.0, 32.0), (27.2, 32.0))      # (y, z)
 AMP_DOME_R, AMP_DOME_LEN = 3.5, 8.0
 
 # No power button: the PiSugar's own button is used.
@@ -317,7 +318,7 @@ def build_body() -> mf.Manifold:
                    for dy, dz in AMP_DOMES])
 
     # cable pass-through speaker chamber -> electronics (seal with hot glue)
-    body -= cyl_x(85.0, 20.0, 105.0, 118.0, 3.0)
+    body -= cyl_x(45.0, 20.0, 105.0, 118.0, 3.0)
     return body
 
 

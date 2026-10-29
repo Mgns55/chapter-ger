@@ -70,7 +70,7 @@
 
 ## Verbindung durch die Trennwand
 
-Nur der Lautsprecher sitzt in der linken Kammer, alles andere rechts. Durch die Trennwand geht nur das zweiadrige Lautsprecherkabel: ein Ø-6-mm-Loch unten, nah an der Rückseite. Danach das Loch mit Heißkleber dicht machen.
+Nur der Lautsprecher sitzt in der linken Kammer, alles andere rechts. Durch die Trennwand geht nur das zweiadrige Lautsprecherkabel: ein Ø-6-mm-Loch unten, 45 mm hinter der Front, gleich hinter dem Verstärker. Danach das Loch mit Heißkleber dicht machen.
 
 ## Noch offen
 

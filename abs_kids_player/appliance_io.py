@@ -357,7 +357,7 @@ class Sh1122Display:
         count = max(1, len(options))
         option_w = (self.width - margin * 2 - gap * (count - 1)) // count
         if count >= 5:      # many buttons: widths follow the labels so none gets cut off
-            self.draw_proportional_option_row(options, selected_index, y, margin, gap, option_h)
+            self.draw_proportional_option_row(options, selected_index, y, 3, 2, option_h)
             return
         for index, option in enumerate(options):
             if count == 1:
@@ -378,7 +378,7 @@ class Sh1122Display:
 
     def draw_proportional_option_row(self, options, selected_index, y, margin, gap, option_h) -> None:
         available = self.width - margin * 2 - gap * (len(options) - 1)
-        needed = [text_width(self.draw, option, self.font_bottom) + 8 for option in options]
+        needed = [text_width(self.draw, option, self.font_bottom) + 6 for option in options]
         spare = max(0, available - sum(needed))
         widths = [w + spare // len(options) for w in needed]
         if sum(needed) > available:          # still too wide: equal widths, labels shortened

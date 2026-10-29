@@ -37,12 +37,12 @@ def active() -> bool:
 
 DISPLAY = {
     # Sleep timer on the device
-    "Timer": "Timer",
-    "Sleep timer": "Einschlaf-Timer",
+    "Timer": "Schlafen",
+    "Sleep timer": "Schlafen nach",
     "15 min": "15 Min",
     "30 min": "30 Min",
     "End of chapter": "Kapitelende",
-    "Timer off": "Timer aus",
+    "Timer off": "Aus",
     "Ch. end": "Kap.",
     # Library and playback
     "Home": "Menü",

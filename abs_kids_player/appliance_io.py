@@ -356,6 +356,9 @@ class Sh1122Display:
         option_h = 18
         count = max(1, len(options))
         option_w = (self.width - margin * 2 - gap * (count - 1)) // count
+        if count >= 5:      # many buttons: widths follow the labels so none gets cut off
+            self.draw_proportional_option_row(options, selected_index, y, margin, gap, option_h)
+            return
         for index, option in enumerate(options):
             if count == 1:
                 option_w = min(90, self.width - margin * 2)
@@ -372,6 +375,23 @@ class Sh1122Display:
             self.draw.rounded_rectangle(box, radius=3, fill=fill, outline=outline)
             label = fit_text(self.draw, option, self.font_bottom, max(1, right - x - 8))
             self.draw_centered_in_box(label, self.font_bottom, box, fill=text_fill)
+
+    def draw_proportional_option_row(self, options, selected_index, y, margin, gap, option_h) -> None:
+        available = self.width - margin * 2 - gap * (len(options) - 1)
+        needed = [text_width(self.draw, option, self.font_bottom) + 8 for option in options]
+        spare = max(0, available - sum(needed))
+        widths = [w + spare // len(options) for w in needed]
+        if sum(needed) > available:          # still too wide: equal widths, labels shortened
+            widths = [available // len(options)] * len(options)
+        x = margin
+        for index, (option, option_w) in enumerate(zip(options, widths)):
+            right = self.width - margin if index == len(options) - 1 else x + option_w
+            box = (x, y, right, y + option_h)
+            selected = index == selected_index
+            self.draw.rounded_rectangle(box, radius=3, fill=255 if selected else 0, outline=255 if selected else 120)
+            label = fit_text(self.draw, option, self.font_bottom, max(1, right - x - 4))
+            self.draw_centered_in_box(label, self.font_bottom, box, fill=0 if selected else 255)
+            x = right + gap
 
     def draw_wifi_setup(self, frame: WifiSetupFrame) -> None:
         top = fit_text(self.draw, frame.top, self.font_bottom, self.width)

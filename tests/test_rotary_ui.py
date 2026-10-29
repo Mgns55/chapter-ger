@@ -306,9 +306,9 @@ class ApplianceMenuTest(unittest.TestCase):
         self.assertEqual(menu.playing_action_index, PLAYING_PLAY_INDEX)
         frame = menu.render()
         self.assertIsInstance(frame, PlayingFrame)
-        self.assertEqual(frame.actions, ("Home", "Prev", "Pause", "Next"))
+        self.assertEqual(frame.actions, ("Home", "Prev", "Pause", "Next", "Timer"))
         self.assertEqual(frame.selected_index, PLAYING_PLAY_INDEX)
-        self.assertEqual(frame.bottom, "Home Prev [Pause] Next")
+        self.assertEqual(frame.bottom, "Home Prev [Pause] Next Timer")
 
         command = menu.click_nav()[0]
 
@@ -380,16 +380,14 @@ class ApplianceMenuTest(unittest.TestCase):
         menu.rotate_nav(1)
         menu.rotate_nav(1)
 
-        self.assertIn("[Next]", menu.render().bottom)
+        self.assertIn("[Timer]", menu.render().bottom)
 
         menu.rotate_nav(1)
 
-        self.assertIn("[Next]", menu.render().bottom)
+        self.assertIn("[Timer]", menu.render().bottom)
 
-        menu.rotate_nav(-1)
-        menu.rotate_nav(-1)
-        menu.rotate_nav(-1)
-        menu.rotate_nav(-1)
+        for _ in range(5):
+            menu.rotate_nav(-1)
 
         self.assertIn("[Home]", menu.render().bottom)
 
@@ -719,3 +717,23 @@ class ApplianceMenuTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SleepTimerMenuTest(unittest.TestCase):
+    def test_timer_button_opens_choices_and_sends_choice(self) -> None:
+        from abs_kids_player.rotary_ui import CommandType, Screen
+        menu = ApplianceMenu(BOOKS)
+        menu.set_session(make_session())
+        menu.rotate_nav(2)                        # Play -> Next -> Timer
+        self.assertEqual(menu.click_nav(), [])
+        self.assertEqual(menu.screen, Screen.SLEEP_TIMER)
+        self.assertEqual(menu.render().bottom, "15 min")
+        menu.rotate_nav(2)                        # -> End of chapter
+        commands = menu.click_nav()
+        self.assertEqual(commands[0].type, CommandType.SET_SLEEP_TIMER)
+        self.assertEqual(commands[0].sleep_choice, "chapter")
+        self.assertEqual(menu.screen, Screen.PLAYING)
+        menu.set_sleep_timer_state("chapter", "Ch. end")
+        self.assertIn("Ch. end", menu.render().actions)
+        menu.open_sleep_timer_menu()
+        self.assertEqual(menu.sleep_timer_options[-1], ("off", "Timer off"))

@@ -22,6 +22,7 @@ from .listening_log import summarize as summarize_listening
 from .api import AudiobookshelfClient, AudiobookshelfError, client_from_config
 from .bluetooth_audio import connected_bluetooth_audio_device
 from .config import (
+    LIBRARY_SORT_ADDED,
     LIBRARY_SORT_AUTHOR,
     LIBRARY_SORT_TITLE,
     MAX_SLEEP_TIMER_MINUTES,
@@ -87,6 +88,7 @@ PLAYER_EVENT_HEARTBEAT_SECONDS = 10.0
 MAX_POST_BODY_BYTES = 64 * 1024
 CSRF_FIELD_NAME = "csrf_token"
 LOGO_PATH = Path(__file__).resolve().parent / "assets" / "chapter-logo.png"
+APP_TITLE = "Franz und Franz Pro"
 
 
 PAGE = """<!doctype html>
@@ -95,7 +97,7 @@ PAGE = """<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="chapter-csrf-token" content="{csrf_token}">
-  <title>Chapter Player</title>
+  <title>Franz und Franz Pro</title>
   <link rel="icon" type="image/png" href="/assets/chapter-logo.png">
   <style>
     body {{
@@ -664,7 +666,7 @@ PAGE = """<!doctype html>
     <header class="app-header">
       <div class="app-brand">
         <img class="app-logo" src="/assets/chapter-logo.png" width="84" height="63" alt="">
-        <h1>Chapter Player</h1>
+        <h1>Franz und Franz Pro</h1>
       </div>
     </header>
     {message}
@@ -1308,6 +1310,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             "/settings/audio-cache/clear": self.handle_audio_cache_clear_post,
             "/settings/display": self.handle_display_setting_post,
             "/settings/group-series": self.handle_group_series_setting_post,
+            "/settings/hide-finished": self.handle_hide_finished_setting_post,
             "/settings/amp-idle": self.handle_amp_idle_setting_post,
             "/settings/headphones": self.handle_headphones_setting_post,
             "/settings/mqtt": self.handle_mqtt_setting_post,
@@ -1478,6 +1481,14 @@ class SetupHandler(BaseHTTPRequestHandler):
         if fields is None:
             return
         save_config(replace(load_config(), group_series=one(fields, "enabled") == "1"))
+        self.redirect_home()
+
+    def handle_hide_finished_setting_post(self) -> None:
+        fields = self.post_fields()
+        if fields is None:
+            return
+        save_config(replace(load_config(), hide_finished=one(fields, "enabled") == "1"))
+        queue_web_player_command("reload_books")
         self.redirect_home()
 
     def handle_headphones_setting_post(self) -> None:
@@ -1697,8 +1708,8 @@ class SetupHandler(BaseHTTPRequestHandler):
         body = (
             "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-            "<title>Chapter Player</title></head><body><main>"
-            f"<h1>Chapter Player</h1><p>{html.escape(message)}</p>"
+            f"<title>{APP_TITLE}</title></head><body><main>"
+            f"<h1>{APP_TITLE}</h1><p>{html.escape(message)}</p>"
             '<p><a href="/">Reload setup page</a></p></main></body></html>'
         )
         body = i18n.html_page(body).encode("utf-8")
@@ -2296,6 +2307,18 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         </div>
         <div class="settings-row">
           <div>
+            <div class="setting-name">Hide finished books</div>
+          </div>
+          <form class="toggle-form" method="post" action="/settings/hide-finished">
+            {csrf_input}
+            <input type="hidden" name="enabled" value="{hide_finished_next}">
+            <button class="toggle-button{hide_finished_class}" type="submit" aria-pressed="{hide_finished_pressed}">
+              <span class="sr-only">{hide_finished_label}</span>
+            </button>
+          </form>
+        </div>
+        <div class="settings-row">
+          <div>
             <div class="setting-name">Group series</div>
           </div>
           <form class="toggle-form" method="post" action="/settings/group-series">
@@ -2444,6 +2467,10 @@ def render_settings_card(config: AppConfig, csrf_token: str = "") -> str:
         sleep_button_label=sleep_button_label,
         sleep_duration_controls=sleep_duration_controls,
         audio_cache_summary=html.escape(audio_cache_summary()),
+        hide_finished_next="0" if config.hide_finished else "1",
+        hide_finished_class=" is-on" if config.hide_finished else "",
+        hide_finished_pressed="true" if config.hide_finished else "false",
+        hide_finished_label="Show finished books" if config.hide_finished else "Hide finished books",
         group_series_next="0" if config.group_series else "1",
         group_series_class=" is-on" if config.group_series else "",
         group_series_pressed="true" if config.group_series else "false",
@@ -2741,6 +2768,7 @@ def render_library_sort_options(selected_mode: str) -> str:
     options = (
         (LIBRARY_SORT_TITLE, "Title"),
         (LIBRARY_SORT_AUTHOR, "Author (last name)"),
+        (LIBRARY_SORT_ADDED, "Date added"),
     )
     return "\n".join(
         '<option value="{value}"{selected}>{label}</option>'.format(

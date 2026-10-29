@@ -259,7 +259,11 @@ class AudiobookshelfClient:
                 progress=float(progress.get("progress") or 0),
                 series_name=series_name,
                 series_sequence=series_sequence,
+                added_at=timestamp_seconds(item.get("addedAt")),
+                is_finished=bool(progress.get("isFinished")),
             )
+            if all_progress is not None and (all_progress.get(book.id) or {}).get("isFinished"):
+                book.is_finished = True
             if not book.current_time:
                 if all_progress is not None:
                     remote_progress = all_progress.get(book.id) or {}
@@ -497,6 +501,15 @@ def parse_chapters(raw_chapters: list[dict[str, Any]], duration: float) -> list[
             )
         )
     return chapters
+
+
+def timestamp_seconds(value: Any) -> float:
+    """Audiobookshelf timestamps are milliseconds; tolerate seconds and junk."""
+    try:
+        number = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return number / 1000 if number > 1e11 else number
 
 
 def extract_progress(item: dict[str, Any]) -> dict[str, Any]:

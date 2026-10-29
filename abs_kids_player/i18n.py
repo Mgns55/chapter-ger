@@ -36,6 +36,14 @@ def active() -> bool:
 # ---------------------------------------------------------------------------
 
 DISPLAY = {
+    # Sleep timer on the device
+    "Timer": "Timer",
+    "Sleep timer": "Einschlaf-Timer",
+    "15 min": "15 Min",
+    "30 min": "30 Min",
+    "End of chapter": "Kapitelende",
+    "Timer off": "Timer aus",
+    "Ch. end": "Kap.",
     # Library and playback
     "Home": "Menü",
     "Prev": "Zurück",
@@ -148,6 +156,7 @@ DISPLAY_PATTERNS: list[tuple[re.Pattern, Replacement]] = [
     (re.compile(r"^Browse to (.+)$"), r"Öffne \1"),
     (re.compile(r"^By (.+)$"), r"von \1"),
     (re.compile(r"^Volume (\d+)%$"), r"Lautstärke \1 %"),
+    (re.compile(r"^(\d+) min$"), r"\1 Min"),
     (re.compile(r"^Series with (\d+) titles$"), r"Serie · \1 Titel"),
     (re.compile(r"^(.+) \(active\)$"), r"\1 (aktiv)"),
 ]
@@ -245,6 +254,9 @@ WEB = {
     "Enable Bluetooth": "Bluetooth einschalten",
     "Offline storage": "Offline-Speicher",
     "Group series": "Serien zusammenfassen",
+    "Hide finished books": "Abgeschlossene Hörbücher ausblenden",
+    "Show finished books": "Abgeschlossene Hörbücher wieder anzeigen",
+    "Date added": "Datum hinzugefügt (neueste zuerst)",
     "Enable series grouping": "Serien zusammenfassen einschalten",
     "Disable series grouping": "Serien zusammenfassen ausschalten",
     "Amplifier off when idle": "Verstärker im Leerlauf aus",

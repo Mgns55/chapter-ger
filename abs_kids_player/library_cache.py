@@ -48,6 +48,8 @@ def load_cached_books(config: AppConfig) -> list[Book]:
                     series_name=str(value.get("series_name", "")),
                     series_sequence=str(value.get("series_sequence", "")),
                     series_total=int(value.get("series_total", 0)),
+                    added_at=float(value.get("added_at", 0)),
+                    is_finished=bool(value.get("is_finished", False)),
                 )
             )
         except (KeyError, TypeError, ValueError):
@@ -75,6 +77,8 @@ def save_cached_books(config: AppConfig, books: list[Book]) -> None:
                 "series_name": book.series_name,
                 "series_sequence": book.series_sequence,
                 "series_total": book.series_total,
+                "added_at": book.added_at,
+                "is_finished": book.is_finished,
             }
             for book in books
         ],

@@ -15,6 +15,12 @@ class Book:
     series_name: str = ""
     series_sequence: str = ""
     series_total: int = 0
+    added_at: float = 0.0          # when the book was added to Audiobookshelf (Unix seconds)
+    is_finished: bool = False      # marked finished in Audiobookshelf
+
+    @property
+    def finished(self) -> bool:
+        return self.is_finished or (self.duration > 0 and self.progress >= 0.995)
 
     @property
     def has_play_history(self) -> bool:

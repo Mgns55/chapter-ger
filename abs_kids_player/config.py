@@ -17,7 +17,8 @@ SCREEN_SAVER_CLOCK = "clock"
 SCREEN_SAVER_MODES = (SCREEN_SAVER_CHAPTER, SCREEN_SAVER_BOOKS, SCREEN_SAVER_CLOCK)
 LIBRARY_SORT_TITLE = "title"
 LIBRARY_SORT_AUTHOR = "author"
-LIBRARY_SORT_MODES = (LIBRARY_SORT_TITLE, LIBRARY_SORT_AUTHOR)
+LIBRARY_SORT_ADDED = "added"               # newest first
+LIBRARY_SORT_MODES = (LIBRARY_SORT_TITLE, LIBRARY_SORT_AUTHOR, LIBRARY_SORT_ADDED)
 PLAYBACK_SPEEDS = (1.0, 1.5, 2.0)
 DEFAULT_PLAYBACK_SPEED = 1.0
 SCREEN_SAVER_DIM_LEVELS = (10, 15, 20, 25, 35, 50)
@@ -89,7 +90,8 @@ class AppConfig:
     mqtt_password: str = ""
     headphones_enabled: bool = False                 # a headphone socket is wired to the Pi's jack
     headphone_max_percent: int = DEFAULT_HEADPHONE_MAX_PERCENT
-    screen_saver_word: str = ""                      # empty = device name (hostname), e.g. "Franz"
+    screen_saver_word: str = ""
+    hide_finished: bool = False                      # finished books disappear from the menu                      # empty = device name (hostname), e.g. "Franz"
 
     @property
     def is_ready(self) -> bool:
@@ -136,6 +138,7 @@ def load_config() -> AppConfig:
         headphones_enabled=bool(data.get("headphones_enabled", False)),
         headphone_max_percent=valid_headphone_max_percent(data.get("headphone_max_percent")),
         screen_saver_word=valid_screen_saver_word(data.get("screen_saver_word")),
+        hide_finished=bool(data.get("hide_finished", False)),
     )
 
 

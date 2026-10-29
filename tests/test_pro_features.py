@@ -378,3 +378,61 @@ class VolumeCurveTest(unittest.TestCase):
         steps = [20 * math.log10(volume_amplitude(p)) for p in range(5, 101, 5)]
         diffs = {round(b - a, 6) for a, b in zip(steps, steps[1:])}
         self.assertEqual(len(diffs), 1)
+
+
+class ManualSleepTimerTest(unittest.TestCase):
+    def session(self):
+        from abs_kids_player.models import Chapter, PlaybackSession
+        return PlaybackSession(id="s1", library_item_id="b1", title="T", author="A", duration=600,
+                               current_time=0, cover_url="", tracks=[],
+                               chapters=[Chapter(index=1, title="1", start=0, end=200),
+                                         Chapter(index=2, title="2", start=200, end=600)])
+
+    def test_minutes_count_only_while_playing(self):
+        from abs_kids_player.oled_service import ManualSleepTimer
+        timer = ManualSleepTimer()
+        session = self.session()
+        timer.set("15", session, 10)
+        self.assertEqual(timer.label, "15 min")
+        self.assertFalse(timer.tick(600, session, 10, is_playing=False))
+        self.assertFalse(timer.tick(600, session, 10, is_playing=True))
+        self.assertEqual(timer.label, "5 min")
+        self.assertTrue(timer.tick(300, session, 10, is_playing=True))
+        self.assertFalse(timer.active)
+
+    def test_end_of_chapter(self):
+        from abs_kids_player.oled_service import ManualSleepTimer
+        timer = ManualSleepTimer()
+        session = self.session()
+        timer.set("chapter", session, 250)
+        self.assertEqual(timer.chapter_end, 600)
+        self.assertFalse(timer.tick(1, session, 400, True))
+        self.assertTrue(timer.tick(1, session, 599.8, True))
+
+    def test_other_book_cancels(self):
+        from abs_kids_player.oled_service import ManualSleepTimer
+        timer = ManualSleepTimer()
+        timer.set("30", self.session(), 0)
+        self.assertFalse(timer.tick(1, None, 0, True))
+        self.assertFalse(timer.active)
+
+
+class LibraryFilterSortTest(unittest.TestCase):
+    def test_hide_finished_and_newest_first(self):
+        from abs_kids_player.config import AppConfig
+        from abs_kids_player.models import Book
+        from abs_kids_player.oled_service import books_for_menu
+        books = [
+            Book(id="a", title="Alt", author="X", duration=100, cover_url="", added_at=100),
+            Book(id="b", title="Beendet", author="X", duration=100, cover_url="", added_at=300, is_finished=True),
+            Book(id="c", title="Neu", author="X", duration=100, cover_url="", added_at=200),
+        ]
+        ordered = books_for_menu(books, AppConfig(library_sort_mode="added"))
+        self.assertEqual([b.id for b in ordered], ["b", "c", "a"])
+        hidden = books_for_menu(books, AppConfig(library_sort_mode="added", hide_finished=True))
+        self.assertEqual([b.id for b in hidden], ["c", "a"])
+
+    def test_added_at_comes_from_audiobookshelf_milliseconds(self):
+        from abs_kids_player.api import timestamp_seconds
+        self.assertEqual(timestamp_seconds(1700000000000), 1700000000.0)
+        self.assertEqual(timestamp_seconds(None), 0.0)

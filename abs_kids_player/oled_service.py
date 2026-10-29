@@ -51,6 +51,7 @@ from .bluetooth_audio import (
 from .config import (
     DEFAULT_SCREEN_SAVER_DIM_PERCENT,
     screen_saver_word,
+    LIBRARY_SORT_ADDED,
     LIBRARY_SORT_AUTHOR,
     LIBRARY_SORT_TITLE,
     SCREEN_SAVER_BOOKS,
@@ -239,6 +240,69 @@ class ListeningSleepTimer:
         self.sleep_started_at = 0.0
 
 
+@dataclass
+class ManualSleepTimer:
+    """Einschlaf-Timer chosen on the device: 15 / 30 minutes of listening or end of chapter."""
+    choice: str = ""                 # "", "15", "30" or "chapter"
+    remaining_seconds: float = 0.0
+    chapter_end: float = 0.0         # book position where the chosen chapter ends
+    session_id: str = ""
+
+    @property
+    def active(self) -> bool:
+        return bool(self.choice)
+
+    def set(self, choice: str, session: Any, current_time: float) -> None:
+        if choice not in ("15", "30", "chapter") or session is None:
+            self.clear()
+            return
+        self.choice = choice
+        self.session_id = session.id or session.library_item_id
+        if choice == "chapter":
+            self.chapter_end = chapter_end_after(session, current_time)
+        else:
+            self.remaining_seconds = int(choice) * 60.0
+
+    def clear(self) -> None:
+        self.choice = ""
+        self.remaining_seconds = 0.0
+        self.chapter_end = 0.0
+        self.session_id = ""
+
+    def tick(self, elapsed_seconds: float, session: Any, current_time: float, is_playing: bool) -> bool:
+        """True once when the timer runs out; counts only time actually listened."""
+        if not self.active:
+            return False
+        if session is None or (session.id or session.library_item_id) != self.session_id:
+            self.clear()                 # another book or playback stopped
+            return False
+        if not is_playing:
+            return False
+        if self.choice == "chapter":
+            expired = current_time >= self.chapter_end - 0.3
+        else:
+            self.remaining_seconds -= max(0.0, elapsed_seconds)
+            expired = self.remaining_seconds <= 0
+        if expired:
+            self.clear()
+        return expired
+
+    @property
+    def label(self) -> str:
+        if self.choice == "chapter":
+            return "Ch. end"
+        if self.active:
+            return f"{max(1, math.ceil(self.remaining_seconds / 60))} min"
+        return ""
+
+
+def chapter_end_after(session: Any, current_time: float) -> float:
+    for chapter in getattr(session, "chapters", None) or []:
+        if chapter.start <= current_time < chapter.end:
+            return float(chapter.end)
+    return float(getattr(session, "duration", 0) or 0)
+
+
 def bluetooth_result_frame(result: BluetoothActionResult) -> DisplayFrame:
     if result.success and result.devices:
         return TwoLineFrame("Choose device", "Scroll and click")
@@ -415,10 +479,17 @@ def load_library_books(
 
     client = client_from_config(config, client_factory)
     library_id = client.choose_library_id(config.library_id)
-    return sorted_books_for_menu(
+    return books_for_menu(
         [*client.get_books(library_id), *podcast_books(config.podcasts)],
-        config.library_sort_mode,
+        config,
     )
+
+
+def books_for_menu(books: list[Book], config: AppConfig) -> list[Book]:
+    """Library as the menu shows it: optionally without finished books, in the chosen order."""
+    if config.hide_finished:
+        books = [book for book in books if book_is_podcast(book) or not book.finished]
+    return sorted_books_for_menu(books, config.library_sort_mode)
 
 
 def sorted_books_for_menu(
@@ -431,8 +502,10 @@ def sorted_books_for_menu(
 def book_menu_sort_key(
     book: Book,
     sort_mode: str = LIBRARY_SORT_TITLE,
-) -> tuple[str, str, str, str]:
+) -> tuple:
     title = book.display_title
+    if sort_mode == LIBRARY_SORT_ADDED:
+        return (-book.added_at, title_sort_text(title), title.casefold(), "")
     if sort_mode == LIBRARY_SORT_AUTHOR:
         return (
             author_sort_text(book.author) or "\uffff",
@@ -904,6 +977,11 @@ def handle_web_player_commands(
             if not switch_player_profile(command.text):
                 continue
             command = replace(command, action="refresh_library")
+        if command.action == "reload_books":      # e.g. "hide finished" changed: keep playing
+            changed = True
+            refresh_library = True
+            continue
+
         if command.action == "refresh_library":
             if playback.is_playing:
                 playback.pause(sync=True)
@@ -1042,7 +1120,7 @@ def run_oled_service(
         runtime_config = startup_config
         playback.set_playback_rate(startup_config.playback_speed)
         menu = ApplianceMenu(
-            sorted_books_for_menu(load_cached_books(startup_config), startup_config.library_sort_mode),
+            books_for_menu(load_cached_books(startup_config), startup_config),
             library_sort_mode=startup_config.library_sort_mode,
         )
         menu.set_group_series(startup_config.group_series)
@@ -1084,6 +1162,7 @@ def run_oled_service(
         software_update_display_ready = False
         software_update_screen_visible = False
         sleep_timer = ListeningSleepTimer()
+        manual_sleep_timer = ManualSleepTimer()
         display_brightness_percent = DEFAULT_ACTIVE_BRIGHTNESS_PERCENT
         screen_saver_visible = False
         wake_input_quiet_until = 0.0
@@ -1423,6 +1502,12 @@ def run_oled_service(
                     cached_home_frame = None
                     home_frame_loaded_at = now
                 for command in commands:
+                    if command.type == CommandType.SET_SLEEP_TIMER:
+                        manual_sleep_timer.set(command.sleep_choice, playback.session, playback.current_time)
+                        menu.set_sleep_timer_state(manual_sleep_timer.choice, manual_sleep_timer.label)
+                        print(f"Sleep timer: {command.sleep_choice}")
+                        menu_changed = True
+                        continue
                     if command.type == CommandType.SET_HEADPHONES:
                         PENDING_OUTPUT_REQUEST["value"] = "headphones" if command.headphones else "speaker"
                         menu_changed = True
@@ -1570,6 +1655,17 @@ def run_oled_service(
                     menu_changed = True
                 if sleep_timer.prompt_active:
                     menu.update_sleep_confirmation(sleep_timer.countdown_seconds(now))
+                if manual_sleep_timer.tick(
+                    full_loop_elapsed, playback.session, playback.current_time, playback.is_playing
+                ):
+                    print("Sleep timer: time is up, pausing")
+                    pause_and_publish_playback(playback, menu, software_volume, software_muted)
+                    menu_changed = True
+                if (manual_sleep_timer.choice, manual_sleep_timer.label) != (
+                    menu.sleep_timer_choice, menu.sleep_timer_label
+                ):
+                    menu.set_sleep_timer_state(manual_sleep_timer.choice, manual_sleep_timer.label)
+                    menu_changed = True
 
                 if cached_status is None or now - last_status_load >= status_refresh_seconds:
                     cached_status = wifi_status()

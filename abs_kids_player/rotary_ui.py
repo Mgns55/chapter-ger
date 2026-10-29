@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Union
 
-from .config import LIBRARY_SORT_AUTHOR, LIBRARY_SORT_TITLE, valid_library_sort_mode
+from .config import LIBRARY_SORT_ADDED, LIBRARY_SORT_AUTHOR, LIBRARY_SORT_TITLE, valid_library_sort_mode
 from .models import Book, Chapter, PlaybackSession
 from .player_state import LastPlaybackState
 
@@ -24,6 +24,7 @@ class Screen(str, Enum):
     BLUETOOTH_DEVICES = "bluetooth_devices"
     SERIES = "series"
     PROFILE = "profile"
+    SLEEP_TIMER = "sleep_timer"
 
 
 class CommandType(str, Enum):
@@ -43,6 +44,7 @@ class CommandType(str, Enum):
     CONFIRM_STILL_LISTENING = "confirm_still_listening"
     SWITCH_PROFILE = "switch_profile"
     SET_HEADPHONES = "set_headphones"
+    SET_SLEEP_TIMER = "set_sleep_timer"
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,7 @@ class MenuCommand:
     bluetooth_device_name: str = ""
     profile_name: str = ""
     headphones: bool = False
+    sleep_choice: str = ""         # "15", "30", "chapter" or "off"
 
 
 @dataclass(frozen=True)
@@ -149,7 +152,7 @@ class VolumeFrame:
 class PlayingFrame:
     chapter_text: str
     remaining_text: str
-    actions: tuple[str, str, str, str]
+    actions: tuple[str, ...]
     selected_index: int
     title_scroll_px: int = 0
     muted: bool = False
@@ -330,7 +333,9 @@ DisplayFrame = Union[
 ]
 
 
-PLAYING_ACTIONS = ["Home", "Prev", "Play", "Next"]
+PLAYING_ACTIONS = ["Home", "Prev", "Play", "Next", "Timer"]
+PLAYING_TIMER_INDEX = 4
+SLEEP_TIMER_CHOICES = (("15", "15 min"), ("30", "30 min"), ("chapter", "End of chapter"))
 PLAYING_PLAY_INDEX = 2
 VOLUME_STEP_PERCENT = 5
 VOLUME_OVERLAY_SECONDS = 3
@@ -380,6 +385,9 @@ class ApplianceMenu:
         self.current_time = 0.0
         self.is_playing = False
         self.playing_action_index = PLAYING_PLAY_INDEX
+        self.sleep_timer_index = 0
+        self.sleep_timer_choice = ""      # active choice, set by the player
+        self.sleep_timer_label = ""       # e.g. "14 min" while a timer runs
         self.volume_percent = 50
         self.volume_overlay_remaining = 0
         self.title_scroll_position = 0
@@ -492,6 +500,25 @@ class ApplianceMenu:
             options.extend(("profile", name, name) for name in self.profiles)
         return options
 
+    # ------------------------------------------------------------ sleep timer
+    @property
+    def sleep_timer_options(self) -> list[tuple[str, str]]:
+        options = [("back", "Back"), *SLEEP_TIMER_CHOICES]
+        if self.sleep_timer_choice:
+            options.append(("off", "Timer off"))
+        return options
+
+    def open_sleep_timer_menu(self) -> None:
+        options = self.sleep_timer_options
+        self.sleep_timer_index = next(
+            (i for i, (value, _l) in enumerate(options) if value == self.sleep_timer_choice), 1
+        )
+        self.screen = Screen.SLEEP_TIMER
+
+    def set_sleep_timer_state(self, choice: str, label: str) -> None:
+        self.sleep_timer_choice = choice
+        self.sleep_timer_label = label
+
     @property
     def profile_options(self) -> list[str]:
         return [label for _kind, _value, label in self.quick_options]
@@ -572,6 +599,8 @@ class ApplianceMenu:
                 self.book_index = books[self.series_index - 1]
         elif self.screen == Screen.PROFILE:
             self.profile_index = wrap_index(self.profile_index + direction, len(self.quick_options))
+        elif self.screen == Screen.SLEEP_TIMER:
+            self.sleep_timer_index = wrap_index(self.sleep_timer_index + direction, len(self.sleep_timer_options))
         elif self.screen == Screen.STARTUP_RESUME:
             self.startup_resume_index = clamp(self.startup_resume_index + direction, 0, 1)
         elif self.screen == Screen.RESUME_CHOICE:
@@ -678,7 +707,18 @@ class ApplianceMenu:
             if action == "Next":
                 self.queue_chapter_jump(1)
                 return []
+            if action == "Timer":
+                self.open_sleep_timer_menu()
+                return []
             return [MenuCommand(CommandType.TOGGLE_PLAYBACK)]
+
+        if self.screen == Screen.SLEEP_TIMER:
+            options = self.sleep_timer_options
+            value, _label = options[min(self.sleep_timer_index, len(options) - 1)]
+            self.screen = Screen.PLAYING if self.session is not None else Screen.LIBRARY
+            if value == "back":
+                return []
+            return [MenuCommand(CommandType.SET_SLEEP_TIMER, sleep_choice=value)]
 
         if self.screen == Screen.CHAPTER_CONFIRM:
             if not self.confirm_yes:
@@ -831,6 +871,15 @@ class ApplianceMenu:
             kind, value, label = options[index]
             return ProfileMenuFrame(
                 label, index, len(options), active=kind == "profile" and value == self.active_profile
+            )
+
+        if self.screen == Screen.SLEEP_TIMER:
+            options = self.sleep_timer_options
+            index = min(self.sleep_timer_index, len(options) - 1)
+            value, label = options[index]
+            return ProfileMenuFrame(
+                label, index, len(options), active=bool(value) and value == self.sleep_timer_choice,
+                title="Sleep timer",
             )
 
         if self.screen == Screen.STARTUP_RESUME and self.startup_resume_state is not None:
@@ -1037,7 +1086,7 @@ class ApplianceMenu:
         self._title_scroll_subject = subject
 
     def show_section_letter(self) -> None:
-        if not self.books:
+        if not self.books or self.library_sort_mode == LIBRARY_SORT_ADDED:   # no letters for "newest first"
             self.clear_section_letter()
             return
         book = self.books[self.book_index]
@@ -1099,9 +1148,11 @@ class ApplianceMenu:
         return " ".join(actions)
 
     @property
-    def playing_actions(self) -> tuple[str, str, str, str]:
+    def playing_actions(self) -> tuple[str, ...]:
         actions = PLAYING_ACTIONS.copy()
         actions[PLAYING_PLAY_INDEX] = "Pause" if self.is_playing else "Play"
+        if self.sleep_timer_label:
+            actions[PLAYING_TIMER_INDEX] = self.sleep_timer_label
         return tuple(actions)
 
     @property

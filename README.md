@@ -3,7 +3,7 @@
 > **Deutsche Fassung** von [chrismtopher/chapter](https://github.com/chrismtopher/chapter) mit deutscher Oberfläche, abschaltbarem Bluetooth und Leistungsverbesserungen für den Raspberry Pi Zero. Installation:
 >
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/Mgns55/chapter-ger/v0.3.27/scripts/install-raspberry-pi.sh | bash
+> curl -fsSL https://raw.githubusercontent.com/Mgns55/chapter-ger/v0.3.28/scripts/install-raspberry-pi.sh | bash
 > ```
 >
 > **Zusätzlich in dieser Fassung**
@@ -16,6 +16,8 @@
 > - **Kein Knacken**: Verstärker im Leerlauf abschalten – dazu den SD-Pin des MAX98357A mit GPIO 17 (Pin 11) verbinden und unter *Einstellungen* einschalten.
 > - **Home Assistant** per MQTT (automatische Erkennung): Status, Titel, Kapitel, Akku, Hörzeit, Lautstärke, Abspielen/Pause, Profilwahl.
 > - **Kopfhörer** (optional, Buchse an der Klinke des Pi): unter *Einstellungen → Kopfhörerbuchse* einschalten; Umschalten über das Schnellmenü (Menü-Knopf 3 Sekunden halten), die Setup-Seite oder Home Assistant. Eigene Höchstlautstärke für Kopfhörer.
+> - **Einschlaf-Timer am Gerät**: im Abspiel-Bildschirm auf *Timer* → 15 Min, 30 Min oder Kapitelende; die Restzeit steht dann auf dem Knopf.
+> - **Sortierung nach Datum hinzugefügt** (neueste zuerst) und **abgeschlossene Hörbücher ausblenden** unter *Einstellungen*.
 > - **Hörzeit-Übersicht** für Eltern auf der Übersichtsseite: heute, letzte 7 Tage, meistgehörte Bücher, Hören nach 20 Uhr.
 
 [![CI](https://github.com/chrismtopher/chapter/actions/workflows/ci.yml/badge.svg)](https://github.com/chrismtopher/chapter/actions/workflows/ci.yml)

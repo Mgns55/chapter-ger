@@ -95,6 +95,11 @@ PI_GUIDE_H, PI_GUIDE_LEG, PI_GUIDE_T = 12.0, 9.0, 2.0
 
 # back panel openings
 USB = (135.0, 105.0)                          # USB-C panel-mount socket (x, z)
+# Round threaded USB-C panel socket (e.g. HENGBIRD USB-C 3.0, 30 cm): flange Ø 32 mm outside,
+# thread ~22 mm, hex nut 30 mm / 9 mm from the inside. The hole has a little play; the flange
+# covers up to Ø 31 mm.
+USB_HOLE_R = 11.75                            # 23.5 mm
+USB_NUT_CLEAR_R = 17.0                        # nothing inside the panel within this radius
 
 # 3.5 mm headphone socket (YACSEJAO D-type panel cable: flange 31 x 26 mm, round front 20 mm,
 # body ~20 mm, 42 mm deep) on the right side, half-way up. It is mounted from the INSIDE:
@@ -364,13 +369,10 @@ def build_back_panel() -> mf.Manifold:
             loops.append(loop)
     panel += union(loops)
 
-    # USB-C panel-mount socket (flange 25 x 8 mm, threaded holes 17 mm apart, Ø 3 mm):
-    # flange sits in a 2 mm recess on the outside, socket body through a 10.5 x 5.5 cut-out,
-    # screws from the inside
+    # round USB-C panel socket: through hole, flange outside, nut inside (no recess: the panel
+    # prints outer face down, a recess would leave an overhanging ring)
     ux, uz = USB
-    panel -= prism_y(rrect(ux - 12.9, uz - 4.4, ux + 12.9, uz + 4.4, 2.5), y_out - 2.0, y_out + 1)
-    panel -= prism_y(rrect(ux - 5.25, uz - 2.75, ux + 5.25, uz + 2.75, 1.2), y_in - 1, y_out + 1)
-    panel -= union([cyl_y(ux + dx, uz, y_in - 1, y_out + 1, 1.7, 32) for dx in (-8.5, 8.5)])
+    panel -= cyl_y(ux, uz, y_in - 4, y_out + 1, USB_HOLE_R, 96)
 
     # ventilation slots above the Pi
     for i in range(6):

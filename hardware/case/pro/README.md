@@ -12,9 +12,9 @@
   - rechnerisch Qtc ≈ 0,86 und fc ≈ 125 Hz
   - mit etwas Dämmwolle etwas tiefer
 - MAX98357A
-- 2 × KY-040 oben, beschriftet mit „Menü“ und „Lautstärke“, befestigt wie im Original-Chapter (zwei Dome mit M2,5-Einsätzen je Drehgeber, Knopf in einer 21-mm-Mulde). Unter jeder Halterung steht eine Stützwand bis zur Front: Beim Druck mit der Front nach unten tragen sich Steg und Säulen damit selbst, und die Halterung ist steifer.
+- 2 × KY-040 oben, ohne Beschriftung (links Menü, rechts Lautstärke; vor dem rechten Knopf ist ein kleines Lautstärke-Symbol eingraviert), befestigt wie im Original-Chapter (zwei Dome mit M2,5-Einsätzen je Drehgeber, Knopf in einer 21-mm-Mulde). Unter jeder Halterung steht eine Stützwand bis zur Front: Beim Druck mit der Front nach unten tragen sich Steg und Säulen damit selbst, und die Halterung ist steifer.
 - 3,5-mm-Kopfhörerbuchse (YACSEJAO D-Typ-Einbaukabel, 18 cm) an der rechten Seite auf halber Höhe, **von innen** montiert: außen sieht man nur die runde schwarze Front (Loch Ø 20,6 mm), keine Schrauben. Das Kabel steckt in der Klinkenbuchse des Pi 3 A+
-- Einschaltknopf oben, mittig hinter den Drehknöpfen (Loch Ø 12,2 mm für einen flachen 12-mm-Edelstahltaster)
+- Kein eigener Einschaltknopf: Ein- und Ausschalten über die Taste des PiSugar
 - „Franz Pro“ ist klein auf der Unterseite eingraviert
 
 ## Teile
@@ -49,7 +49,6 @@
 - **Moosgummi-Dichtband** (ca. 3 × 2 mm) auf die hintere Kante der Lautsprecherkammer
 - etwas **Dämmwolle** oder Polyesterwatte für die Kammer
 - **4 Gummifüße** Ø 10 mm, für die Mulden im Boden
-- **Drucktaster 12 mm**, Edelstahl, flacher Kopf, Schließer (optional mit LED-Ring) – parallel an die Taste des PiSugar gelötet
 - **2 × M3×12** für den Kopfhörerhalter (die mitgelieferten Schrauben und Muttern der Buchse werden nicht gebraucht)
 
 ## Montage

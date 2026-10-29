@@ -83,8 +83,7 @@ KY040_RIB = (8.1, 13.1, -9.55, 12.45)          # dx0, dx1, dy0, dy1
 # angled pin header stay clear.
 KY040_WEB_DX = (7.8, 13.1)                      # covers the rib and the lower tip of the first post
 KY040_WEB_CLEAR = 4.0
-LABEL_BASELINE_Y = 27.0
-LABEL_CAP = 4.5
+VOLUME_ICON_Y = 28.0                           # centre of the engraved volume icon (in front of the knob)
 ENGRAVE = 1.0
 FONT = FontProperties(family="DejaVu Serif")
 
@@ -114,11 +113,7 @@ JACK_CLAMP_RIM_H = 7.0                        # clamp rim reaches from the pad t
 AMP_DOMES = ((63.4, 32.0), (76.6, 32.0))      # (y, z)
 AMP_DOME_R, AMP_DOME_LEN = 3.5, 8.0
 
-# Power button (12 mm flat stainless push button, nut from the inside) on the top, centred
-# between and behind the knobs - clear of the encoder boards, the Pi's audio plug and the
-# headphone socket. Wired in parallel to the PiSugar's power button.
-BUTTON = (167.0, 80.0)                        # (x, y) on the top
-BUTTON_HOLE_R = 6.1                           # 12.2 mm for an M12 thread
+# No power button: the PiSugar's own button is used.
 
 NAME_TEXT = "Franz Pro"                       # engraved on the bottom
 NAME_CAP = 5.0
@@ -182,6 +177,22 @@ def text_solid(text, size, depth):
     for geom in getattr(shape, "geoms", [shape]):
         parts.append(cs_from_shapely(geom).extrude(depth))
     return union(parts).translate([-(minx + maxx) / 2, 0, 0])
+
+
+def volume_icon_solid(depth):
+    """Speaker symbol followed by four bars of growing height, centred on (0, 0), z 0..depth.
+    Bars stand on the front edge (-y) and grow towards the back, read from the front."""
+    shapes = [
+        box(-12.0, -1.6, -9.6, 1.6),                                     # speaker body
+        Polygon([(-9.6, -1.6), (-6.0, -4.2), (-6.0, 4.2), (-9.6, 1.6)]),  # speaker cone
+    ]
+    bar_w, gap, base = 2.0, 1.7, -4.2
+    for i, height in enumerate((2.4, 4.4, 6.4, 8.4)):
+        x0 = -3.0 + i * (bar_w + gap)
+        shapes.append(box(x0, base, x0 + bar_w, base + height))
+    parts = [cs_from_shapely(shape).extrude(depth) for shape in shapes]
+    icon = union(parts)
+    return icon.translate([-(-12.0 + (-3.0 + 3 * (bar_w + gap) + bar_w)) / 2, 0, 0])
 
 
 def to_trimesh(m: mf.Manifold) -> trimesh.Trimesh:
@@ -284,20 +295,14 @@ def build_body() -> mf.Manifold:
         body += union(parts)
         body -= union([cyl_z(kx + dx, KNOB_Y + dy, bottom - 1, bottom + 5.0, M25_INSERT_R, 32)
                        for dx, dy in KY040_POSTS])
-    size = cap_size(LABEL_CAP)
-    widest = max(TextPath((0, 0), t, size=1, prop=FONT).get_extents().width for t, _ in KNOBS)
-    size = min(size, 38.0 / widest)
-    for text, kx in KNOBS:
-        label = text_solid(text, size, ENGRAVE + 1).translate([kx, LABEL_BASELINE_Y, H - ENGRAVE])
-        body -= label
+    # no words on the top: only a small volume icon in front of the volume knob
+    body -= volume_icon_solid(ENGRAVE + 1).translate([KNOBS[1][1], VOLUME_ICON_Y, H - ENGRAVE])
 
     # rubber-feet recesses (10 mm, 1 mm deep)
     for x in (20.0, W - 20.0):
         for y in (15.0, BODY_D - 12.0):
             body -= cyl_z(x, y, -1, 1.0, 5.5)
 
-    # power button on the top
-    body -= cyl_z(BUTTON[0], BUTTON[1], H - WALL - 1, H + 1, BUTTON_HOLE_R, 96)
 
     # amplifier domes on the divider (teardrops pointing -y: the divider prints upright, +y up)
     divider_face = RIGHT_CAV[0]

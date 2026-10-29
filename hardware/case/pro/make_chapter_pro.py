@@ -77,6 +77,12 @@ KNOB_HOLE_R = 6.72
 KY040_POSTS = ((8.3, -5.8), (8.8, 11.1))      # (dx, dy) from the encoder axis
 KY040_POST_R, KY040_POST_LEN = 3.5, 17.5
 KY040_RIB = (8.1, 13.1, -9.55, 12.45)          # dx0, dx1, dy0, dy1
+# Print support: the case prints front-down, so rib and posts would hang ~40 mm above the
+# front wall. A solid web from the front wall up to the rib carries them (no slicer supports)
+# and stiffens the mount. It stops 4 mm short of the post ends so the encoder board and its
+# angled pin header stay clear.
+KY040_WEB_DX = (7.8, 13.1)                      # covers the rib and the lower tip of the first post
+KY040_WEB_CLEAR = 4.0
 LABEL_BASELINE_Y = 27.0
 LABEL_CAP = 4.5
 ENGRAVE = 1.0
@@ -271,6 +277,10 @@ def build_body() -> mf.Manifold:
             tip = mf.Manifold.cube([1.0, 0.01, KY040_POST_LEN + 0.1]).translate(
                 [kx + dx - 0.5, KNOB_Y + dy - KY040_POST_R * 2 ** 0.5, bottom])
             parts.append(mf.Manifold.batch_hull([post, tip]))
+        wx0, wx1 = KY040_WEB_DX
+        web = mf.Manifold.cube([wx1 - wx0, KNOB_Y + dy0 - FRONT_T + 0.2, KY040_POST_LEN - KY040_WEB_CLEAR + 0.1]).translate(
+            [kx + wx0, FRONT_T - 0.1, bottom + KY040_WEB_CLEAR])
+        parts.append(web)
         body += union(parts)
         body -= union([cyl_z(kx + dx, KNOB_Y + dy, bottom - 1, bottom + 5.0, M25_INSERT_R, 32)
                        for dx, dy in KY040_POSTS])

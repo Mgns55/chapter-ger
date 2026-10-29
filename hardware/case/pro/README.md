@@ -12,7 +12,7 @@
   - rechnerisch Qtc ≈ 0,86 und fc ≈ 125 Hz
   - mit etwas Dämmwolle etwas tiefer
 - MAX98357A
-- 2 × KY-040 oben, beschriftet mit „Menü“ und „Lautstärke“, befestigt wie im Original-Chapter (zwei Dome mit M2,5-Einsätzen je Drehgeber, Knopf in einer 21-mm-Mulde)
+- 2 × KY-040 oben, beschriftet mit „Menü“ und „Lautstärke“, befestigt wie im Original-Chapter (zwei Dome mit M2,5-Einsätzen je Drehgeber, Knopf in einer 21-mm-Mulde). Unter jeder Halterung steht eine Stützwand bis zur Front: Beim Druck mit der Front nach unten tragen sich Steg und Säulen damit selbst, und die Halterung ist steifer.
 - 3,5-mm-Kopfhörerbuchse (YACSEJAO D-Typ-Einbaukabel, 18 cm) an der rechten Seite auf halber Höhe, **von innen** montiert: außen sieht man nur die runde schwarze Front (Loch Ø 20,6 mm), keine Schrauben. Das Kabel steckt in der Klinkenbuchse des Pi 3 A+
 - Einschaltknopf oben, mittig hinter den Drehknöpfen (Loch Ø 12,2 mm für einen flachen 12-mm-Edelstahltaster)
 - „Franz Pro“ ist klein auf der Unterseite eingraviert

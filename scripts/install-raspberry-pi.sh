@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_URL="${CHAPTER_REPO_URL:-https://github.com/Mgns55/chapter-ger.git}"
-RELEASE_REF="${CHAPTER_RELEASE_REF:-v0.3.30}"
+RELEASE_REF="${CHAPTER_RELEASE_REF:-v0.3.31}"
 INSTALL_USER="${CHAPTER_INSTALL_USER:-chapter}"
 INSTALL_DIR="${CHAPTER_INSTALL_DIR:-}"
 ASSUME_YES=0
@@ -375,6 +375,7 @@ install_services() {
   sudo_run install -m 0644 "${tmpdir}/audiobookshelf-player-mqtt.service" /etc/systemd/system/
   install_power_sudoers
   install_log_rotation
+  install_wifi_powersave_off
   sudo_run install -m 0755 "${deploy_dir}/audiobookshelf-player-port80-proxy" /usr/local/sbin/audiobookshelf-player-port80-proxy
   sudo_run install -m 0644 "${deploy_dir}/audiobookshelf-player-port80-forward.service" /etc/systemd/system/
 
@@ -399,6 +400,17 @@ install_power_sudoers() {
     return
   fi
   sudo_run install -m 0440 "$tmp" /etc/sudoers.d/chapter-power
+  rm -f "$tmp"
+}
+
+install_wifi_powersave_off() {
+  # The Pi's Wi-Fi power saving lets the chip doze: the player stays "connected" in the
+  # router but stops answering (setup page unreachable, streams stall). Turn it off.
+  local tmp
+  tmp="$(mktemp)"
+  printf '[connection]\nwifi.powersave = 2\n' >"$tmp"
+  sudo_run install -d /etc/NetworkManager/conf.d
+  sudo_run install -m 0644 "$tmp" /etc/NetworkManager/conf.d/chapter-wifi-powersave.conf
   rm -f "$tmp"
 }
 

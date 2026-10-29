@@ -41,6 +41,31 @@ run() { printf '$ %s\n' "$*"; "$@" 2>&1; }
   run iw dev wlan0 link
   run nmcli -f GENERAL.CONNECTION,IP4.ADDRESS,IP4.DNS device show wlan0
 
+  section "Reachability (web page, Audiobookshelf, DNS)"
+  run nmcli -t -f NAME,DEVICE connection show --active
+  run ip -4 addr show wlan0
+  run iw dev wlan0 get power_save
+  for s in audiobookshelf-player-setup audiobookshelf-player-setup-system audiobookshelf-player-port80-forward; do
+    printf '%s: %s\n' "$s" "$(systemctl is-active "$s" 2>/dev/null)"
+  done
+  echo "listening ports:"; ss -ltn 2>/dev/null | grep -E ':(80|47831) ' || echo "  nothing on 80/47831"
+  printf 'setup page (localhost:47831/health): '; curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://localhost:47831/health || echo failed
+  printf 'setup page via port 80: '; curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://localhost/ || echo failed
+  printf 'router ping: '; ping -c 2 -W 2 "$(ip route | awk '/default/ {print $3; exit}')" >/dev/null 2>&1 && echo ok || echo FAILED
+  ABS_HOST=$(sudo python3 -c 'import json,glob,urllib.parse as u
+for p in glob.glob("/home/*/.config/*/config.json")+glob.glob("/home/*/.local/share/*/config.json"):
+    try:
+        d=json.load(open(p)); print(u.urlparse(d["server_url"]).hostname); break
+    except Exception: pass' 2>/dev/null)
+  echo "Audiobookshelf host: ${ABS_HOST:-unknown}"
+  if [ -n "${ABS_HOST:-}" ]; then
+    run getent hosts "$ABS_HOST"
+    printf 'Audiobookshelf /ping: '; curl -s -m 10 "https://${ABS_HOST}/ping" || echo FAILED; echo
+  fi
+
+  section "Setup page log (this boot)"
+  journalctl -u audiobookshelf-player-setup -u audiobookshelf-player-setup-system -u audiobookshelf-player-port80-forward -b --no-pager -o short-iso 2>/dev/null | tail -n 60
+
   section "Top processes"
   top -b -n 1 -o %CPU | head -n 20
   ps -eo pid,rss,pcpu,etime,comm --sort=-rss | head -n 12

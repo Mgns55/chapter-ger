@@ -239,6 +239,9 @@ sync_project() {
 
   if [[ -d "${INSTALL_DIR}/.git" ]]; then
     sudo_run chown -R "$INSTALL_USER:$INSTALL_USER" "$INSTALL_DIR"
+    # An existing checkout may come from another fork (e.g. the original chrismtopher/chapter):
+    # always point it at the repository this installer belongs to.
+    as_install_user git -C "$INSTALL_DIR" remote set-url origin "$REPO_URL"
     as_install_user git -C "$INSTALL_DIR" fetch --force --tags origin
     as_install_user git -C "$INSTALL_DIR" checkout --force --detach "$RELEASE_REF"
     return

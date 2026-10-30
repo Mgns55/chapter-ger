@@ -45,7 +45,7 @@
   - 4 × Blechschraube 2,5 × 6 mm für das Display (in die vorgebohrten Dome)
   - 6 × M2,5×5 für Drehgeber und Verstärker
 - **2 Klett-Kabelbinder**, bis 12 mm breit, für den Pi/PiSugar-Stapel
-- **Runde USB-C-Einbaubuchse mit Gewinde und Kabel**, z. B. HENGBIRD USB-C 3.0 Verlängerung 30 cm: Flansch Ø 32 mm außen, Gewinde ca. 22 mm, Sechskantmutter 30 mm von innen. Loch in der Rückwand Ø 23,5 mm.
+- **Runde USB-C-Einbaubuchse mit Gewinde und Kabel**, z. B. HENGBIRD USB-C 3.0 Verlängerung 30 cm: Gewinde 18 mm (gemessen), Flansch außen, Mutter von innen. Loch in der Rückwand Ø 18,5 mm.
 - **Moosgummi-Dichtband** (ca. 3 × 2 mm) auf die hintere Kante der Lautsprecherkammer
 - etwas **Dämmwolle** oder Polyesterwatte für die Kammer
 - **4 Gummifüße** Ø 10 mm, für die Mulden im Boden

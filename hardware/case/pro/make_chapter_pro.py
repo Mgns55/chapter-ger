@@ -95,9 +95,9 @@ PI_GUIDE_H, PI_GUIDE_LEG, PI_GUIDE_T = 12.0, 9.0, 2.0
 
 # back panel openings
 USB = (135.0, 105.0)                          # USB-C panel-mount socket (x, z)
-# Round threaded USB-C panel socket (HENGBIRD USB-C 3.0, 30 cm): thread measured 18 mm,
-# flange ~24 mm outside, nut from the inside. Hole with 0.5 mm play (printed holes shrink).
-USB_HOLE_R = 9.25                             # 18.5 mm
+# Round threaded USB-C panel socket (HENGBIRD USB-C 3.0, 30 cm): thread measured 20.0 mm,
+# flange outside, nut from the inside. Hole with 0.6 mm play (printed holes shrink).
+USB_HOLE_R = 10.3                             # 20.6 mm
 USB_NUT_CLEAR_R = 17.0                        # nothing inside the panel within this radius
 
 # 3.5 mm headphone socket (YACSEJAO D-type panel cable: flange 31 x 26 mm, round front 20 mm,

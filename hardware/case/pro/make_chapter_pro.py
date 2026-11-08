@@ -397,6 +397,38 @@ def build_speaker_ring() -> mf.Manifold:
     return ring
 
 
+SPK_ADAPTER_T = 5.0          # plate thickness (holds the speaker's own screws)
+SPK_ADAPTER_SKIRT = (50.0, 52.2, SPK_BOSS_H - 0.2)   # r_in, r_out, height: sits inside the lip
+
+
+def build_speaker_adapter() -> mf.Manifold:
+    """Adapter for the real ND90-4 (square frame, 103.5 mm across the corners).
+
+    Screws onto the four existing bosses (M3x10). The speaker is screwed to its back with its
+    own four frame holes (self-tapping screws, holes drilled through the frame as a template).
+    The skirt reaches down to the front wall inside the old centring lip and closes the gap,
+    so the back wave cannot leak round the speaker. Printed speaker side down, skirt up.
+    Local origin = speaker centre, z = 0 speaker side."""
+    plate = [mf.Manifold.cylinder(SPK_ADAPTER_T, 53.0, 53.0, 128)]
+    for a in (-1, 1):
+        for b in (-1, 1):
+            plate.append(mf.Manifold.cylinder(SPK_ADAPTER_T, 5.5, 5.5, 48)
+                         .translate([a * SPK_BOSS_OFFSET, b * SPK_BOSS_OFFSET, 0]))
+    adapter = mf.Manifold.batch_hull(plate)
+    r_in, r_out, h = SPK_ADAPTER_SKIRT
+    adapter += (mf.Manifold.cylinder(h, r_out, r_out, 160) - mf.Manifold.cylinder(h + 2, r_in, r_in, 160)
+                .translate([0, 0, -1])).translate([0, 0, SPK_ADAPTER_T - 0.01])
+    adapter -= mf.Manifold.cylinder(30, 42.5, 42.5, 160).translate([0, 0, -5])     # 85 mm opening
+    for a in (-1, 1):
+        for b in (-1, 1):
+            adapter -= mf.Manifold.cylinder(30, 1.7, 1.7, 32).translate([a * SPK_BOSS_OFFSET, b * SPK_BOSS_OFFSET, -5])
+    # alignment marks on the speaker side: the frame's corners sit on these diagonals
+    for angle in (45, 135, 225, 315):
+        mark = mf.Manifold.cube([8.0, 0.8, 1.2]).translate([44.0, -0.4, -0.6]).rotate([0, 0, angle])
+        adapter -= mark
+    return adapter
+
+
 def build_jack_clamp() -> mf.Manifold:
     """Clamp for the headphone socket: plate on the pads, rim pressing the flange to the wall.
     Printed plate down, rim up. Slide it over the cable before fitting the socket."""
@@ -438,6 +470,7 @@ def main(out_dir="."):
         "chapter-pro-gehaeuse.stl": to_print_body(build_body()),
         "chapter-pro-rueckwand.stl": to_print_panel(build_back_panel()),
         "chapter-pro-lautsprecherring.stl": build_speaker_ring(),
+        "chapter-pro-lautsprecher-adapter.stl": build_speaker_adapter(),
         "chapter-pro-kopfhoererhalter.stl": build_jack_clamp(),
     }
     for name, m in parts.items():

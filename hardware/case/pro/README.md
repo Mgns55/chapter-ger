@@ -23,7 +23,7 @@
 |---|---|---|
 | `stl/chapter-pro-gehaeuse.stl` | 1 | Front nach unten, **ohne Stützen** |
 | `stl/chapter-pro-rueckwand.stl` | 1 | Außenseite nach unten |
-| `stl/chapter-pro-lautsprecherring.stl` | 1 | flache Seite nach unten |
+| `stl/chapter-pro-lautsprecher-adapter.stl` | 1 | Lautsprecherseite (mit den Strichmarken) nach unten |
 | `stl/chapter-pro-kopfhoererhalter.stl` | 1 | flache Seite nach unten |
 | `../stl/chapter-case-knob-v5.stl` | 2 | wie beim Original |
 
@@ -41,7 +41,8 @@
   - 2 in die Dome neben der Kopfhörerbuchse
 - **Schrauben:**
   - 6 × M3×10 (Zylinderkopf) für die Rückwand
-  - 4 × M3×12 für den Lautsprecherring
+  - 4 × M3×10 für den Lautsprecher-Adapter
+  - 4 × Blechschrauben ca. 3 × 10 mm für den Lautsprecher am Adapter
   - 4 × Blechschraube 2,5 × 6 mm für das Display (in die vorgebohrten Dome)
   - 6 × M2,5×5 für Drehgeber und Verstärker
 - **2 Klett-Kabelbinder**, bis 12 mm breit, für den Pi/PiSugar-Stapel
@@ -54,7 +55,11 @@
 ## Montage
 
 1. **Gewindeeinsätze einschmelzen.**
-2. **Lautsprecher:** Den ND90-4 von innen in den Zentrierring über dem Gitter legen. Den Lautsprecherring mit dem Rand zum Lautsprecher aufsetzen und mit 4 × M3×12 festziehen. So spielt der Lochkreis des Lautsprecherkorbs keine Rolle.
+2. **Lautsprecher:** Der ND90-4 hat einen eckigen Korb (103,5 mm über die Ecken), deshalb sitzt er auf einem Adapter:
+   - Den Lautsprecher mit der Membran nach unten mittig auf die Seite des Adapters mit den vier Strichmarken legen; die Ecken des Korbs liegen auf den Strichen.
+   - Durch die vier Korblöcher die Bohrstellen markieren, Lautsprecher abnehmen, mit 2,5 mm vorbohren und den Lautsprecher mit 4 Blechschrauben (ca. 3 × 10 mm) anschrauben.
+   - Einen Streifen Moosgummi-Dichtband auf den Kragen des Adapters kleben, den Adapter mit dem Kragen voran in den Zentrierring an der Front setzen und mit 4 × M3×10 auf die vier Dome schrauben.
+   - Der alte Lautsprecherring wird nicht mehr gebraucht.
 3. **Kabel:** Das Lautsprecherkabel durch das Loch in der Trennwand führen und das Loch mit Heißkleber abdichten. Die Kammer locker mit Dämmwolle füllen.
 4. **Kopfhörerbuchse:** Den Halter über Kabel und Buchsenkörper schieben, die Buchse von innen mit dem Flansch in die flache Mulde um das runde Loch legen (runde Front zeigt nach außen) und den Halter mit 2 × M3×12 auf die beiden Dome schrauben. Der Rand des Halters drückt den Flansch an die Wand.
 5. **Display:** Das Modul mit den Pins nach rechts (von vorn gesehen) auf die 4 Dome legen und mit 4 Blechschrauben festschrauben. Das Fenster sitzt genau über der Leuchtfläche laut Datenblatt.
